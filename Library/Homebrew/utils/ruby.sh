@@ -121,7 +121,17 @@ If there's no Homebrew Portable Ruby available for your processor:
   vendor_ruby_latest_version="$(cat "${vendor_dir}/portable-ruby-version")"
   vendor_ruby_current_version="$(readlink "${vendor_ruby_root}")"
 
-  unset HOMEBREW_RUBY_PATH
+  # unset HOMEBREW_RUBY_PATH
+  echo "HOMEBREW_RUBY_PATH=${HOMEBREW_RUBY_PATH}"
+  echo "HOMEBREW_PATH=${HOMEBREW_PATH}"
+  if [[ -n "${HOMEBREW_RUBY_PATH}" ]]
+  then
+    HOMEBREW_RUBY_PATH=$(find_first_valid_ruby < <(which -a "${HOMEBREW_RUBY_PATH}"))
+    export HOMEBREW_RUBY_PATH
+  else
+    HOMEBREW_RUBY_PATH=$(find_first_valid_ruby < <(PATH="${HOMEBREW_PATH%%:*}" which -a ruby))
+    export HOMEBREW_RUBY_PATH
+  fi
 
   if [[ "${HOMEBREW_COMMAND}" == "vendor-install" ]]
   then

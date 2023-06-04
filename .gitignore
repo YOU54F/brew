@@ -203,6 +203,7 @@
 # Unignore our configuration/completions/documentation.
 !/.devcontainer
 !/.github
+!.cirrus.yml
 !/completions
 !/docs
 !/manpages

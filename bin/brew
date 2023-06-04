@@ -149,6 +149,10 @@ then
 fi
 
 # filter the user environment
+# HOMEBREW_RUBY_PATH=${HOMEBREW_PATH%%:*}:
+# PATH="${HOMEBREW_RUBY_PATH}/usr/bin:/bin:/usr/sbin:/sbin"
+## Path is reset here, and on auto update it fails on
+## aarch64 saying it cant find ruby on path.
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 
 FILTERED_ENV=()
