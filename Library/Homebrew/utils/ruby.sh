@@ -128,9 +128,21 @@ If there's no Homebrew Portable Ruby available for your processor:
   then
     HOMEBREW_RUBY_PATH=$(find_first_valid_ruby < <(which -a "${HOMEBREW_RUBY_PATH}"))
     export HOMEBREW_RUBY_PATH
+    [[ -n "${HOMEBREW_LINUX}" && -n "${TERMINFO_DIRS}" ]] && export TERMINFO_DIRS
+    if [[ -n "${HOMEBREW_RUBY_PATH}" ]]
+    then
+      [[ -n "${HOMEBREW_LINUX}" && -n "${TERMINFO_DIRS}" ]] && export TERMINFO_DIRS
+      export HOMEBREW_RUBY_PATH
+      return 0
+    fi
   else
     HOMEBREW_RUBY_PATH=$(find_first_valid_ruby < <(PATH="${HOMEBREW_PATH%%:*}" which -a ruby))
-    export HOMEBREW_RUBY_PATH
+    if [[ -n "${HOMEBREW_RUBY_PATH}" ]]
+    then
+      [[ -n "${HOMEBREW_LINUX}" && -n "${TERMINFO_DIRS}" ]] && export TERMINFO_DIRS
+      export HOMEBREW_RUBY_PATH
+      return 0
+    fi
   fi
 
   if [[ "${HOMEBREW_COMMAND}" == "vendor-install" ]]
