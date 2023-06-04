@@ -6,16 +6,84 @@ test_script: &test_script |
     ruby --version
     which ruby
     echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /root/.profile
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/you54f/install/HEAD/install.sh)" || true
-    source /root/.profile
-    /home/linuxbrew/.linuxbrew/bin/brew --version
+    ./bin/brew upgrade
 
 cli_amd_task:
   container:
-    image: ubuntu:22.04
+    # image: ubuntu:22.04
+    image: ubuntu-build-essential-amd:latest
   test_script: *test_script
 
 cli_arm_task:
   arm_container:
-      image: ubuntu:22.04
-  test_script: *test_script
+      # image: ubuntu:22.04
+      image: ubuntu-build-essential:latest # an image with curl/build-essential/git pre-installed
+  env:
+    PATH: /root/.travelling-ruby/bin:${PATH}:/home/linuxbrew/.linuxbrew/bin
+    # HOMEBREW_NO_ANALYTICS: 1
+    # HOMEBREW_NO_GOOGLE_ANALYTICS: 1
+  # deps_script: apt update && apt install --yes curl build-essential git
+  brew_fail_script: bin/brew || true # we expect this to fail as no ruby is present
+  traveling_ruby_install_script: /bin/sh -c 'curl -fsSL https://gist.githubusercontent.com/YOU54F/2e47eb0b653b6810dd6a0be9fc6820ea/raw/install.sh' | sh -s -- --ci -v 2.6.10
+  traveling_ruby_test_script: ruby --version
+  brew_install_script: NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/you54f/install/HEAD/install.sh)" || true
+  brew_test_script: |
+    which brew
+    # rm -rf /home/linuxbrew/.linuxbrew/bin/brew
+    # ln -s bin/brew /home/linuxbrew/.linuxbrew/bin/brew
+    # ls /home/linuxbrew/.linuxbrew/bin
+    # cat /home/linuxbrew/.linuxbrew/bin/brew
+    # sed -i 's/^PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"$/PATH="\/root\/.travelling-ruby\/bin:\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/' /home/linuxbrew/.linuxbrew/bin/brew
+    # # sed -i 's/^PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"$/PATH="${HOMEBREW_PATH:-%%:*}:\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/' /home/linuxbrew/.linuxbrew/bin/brew
+    # cat /home/linuxbrew/.linuxbrew/bin/brew
+    # echo "catty"
+    # cat bin/brew
+    # # sed -i 's/^PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"$/PATH="${HOMEBREW_PATH%%:*}:\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/' /home/linuxbrew/.linuxbrew/bin/brew
+    brew upgrade
+    bundle lock --add-platform universal-darwin
+    brew install-bundler-gems --groups=sorbet
+    sed -i 's/^PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"$/PATH="\/root\/.travelling-ruby\/bin:\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/' /home/linuxbrew/.linuxbrew/bin/brew
+    # cat /home/linuxbrew/.linuxbrew/bin/brew | grep PATH=
+    bin/brew upgrade
+
+
+linux_arm_task:
+  arm_container:
+      # image: ubuntu:22.04
+      image: ubuntu-build-essential:latest # an image with curl/build-essential/git pre-installed
+  env:
+    PATH: /root/.travelling-ruby/bin:/root/.travelling-ruby/bin.real:${PATH}:/home/linuxbrew/.linuxbrew/bin
+  ruby_script: ruby --version
+  # brew_install_script: NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/you54f/install/HEAD/install.sh)" || true
+  prebuilt_gems_install_script: |
+    TRAVELING_RUBY_HOME=/root/.travelling-ruby/
+    ls ${TRAVELING_RUBY_HOME}lib/ruby
+    ls ${TRAVELING_RUBY_HOME}lib/ruby/gems/2.6.0/gems/
+    cd ${TRAVELING_RUBY_HOME}lib/ruby/gems
+    GEMS_TO_INSTALL=(nio4r-2.5.9 puma-6.3.0 racc-1.6.2)
+    TRAVELING_RUBY_GEM_RELEASE_URL=https://github.com/YOU54F/traveling-ruby/releases/download/rel-20230601/
+    for gem in "${GEMS_TO_INSTALL[@]}"; do
+      gem_name=$(echo ${gem} | cut -d'-' -f1)
+      gem_version=$(echo ${gem} | awk -F- '{print $NF}' )
+      TRAVELING_RUBY_GEM_NAME=traveling-ruby-gems-20230601-2.6.10-linux-arm64-${gem_name}-${gem_version}.tar.gz
+      echo ${TRAVELING_RUBY_GEM_RELEASE_URL}${TRAVELING_RUBY_GEM_NAME}
+      curl -L -O --fail ${TRAVELING_RUBY_GEM_RELEASE_URL}${TRAVELING_RUBY_GEM_NAME}
+      ls
+      tar xzf ${TRAVELING_RUBY_GEM_NAME}
+      ls
+      # rm ${TRAVELING_RUBY_GEM_NAME}
+      gem install ${gem}
+      # gem install ${gem} -v ${gem_version} --no-document
+    done
+    ls ${TRAVELING_RUBY_HOME}lib/ruby/gems/2.6.0/gems
+    ruby -rfiddle -e true
+    ruby -rjson -e true
+    ruby -rpuma -e true
+  # gems_install_script: |
+  #   GEMS_TO_INSTALL=(mechanize)
+  #   for gem in "${GEMS_TO_INSTALL[@]}"; do
+  #     unset BUNDLE_IGNORE_CONFIG
+  #     LD_BIND_NOW=1 gem install "${gem}"
+  #   done
+  # brew_fail_script: bin/brew upgrade
+  # brew_fail_script: bin/brew install-bundler-gems --groups=sorbet
