@@ -9,9 +9,8 @@ require "json"
 # @api private
 class GitHubReleases
   include Context
-  include Utils::Curl
 
-  URL_REGEX = %r{https://github\.com/([\w-]+)/([\w-]+)?/releases/download/(.+)}.freeze
+  URL_REGEX = %r{https://github\.com/([\w-]+)/([\w-]+)?/releases/download/(.+)}
 
   sig { params(bottles_hash: T::Hash[String, T.untyped]).void }
   def upload_bottles(bottles_hash)

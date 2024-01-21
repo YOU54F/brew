@@ -34,7 +34,9 @@ module Homebrew
                           "preferred format."
       switch "--no-autosquash",
              description: "Skip automatically reformatting and rewording commits in the pull request to our " \
-                          "preferred format."
+                          "preferred format.",
+             disable:     true, # odisabled: remove this switch with 4.3.0
+             hidden:      true
       switch "--branch-okay",
              description: "Do not warn if pulling to a branch besides the repository default (useful for testing)."
       switch "--resolve",
@@ -110,7 +112,7 @@ module Homebrew
   end
 
   def self.get_package(tap, subject_name, subject_path, content)
-    if subject_path.dirname == tap.cask_dir
+    if subject_path.to_s.start_with?("#{tap.cask_dir}/")
       cask = begin
         Cask::CaskLoader.load(content.dup)
       rescue Cask::CaskUnavailableError
@@ -130,7 +132,7 @@ module Homebrew
     subject_path = Pathname(subject_path)
     tap          = Tap.from_path(subject_path)
     subject_name = subject_path.basename.to_s.chomp(".rb")
-    is_cask      = subject_path.dirname == tap.cask_dir
+    is_cask      = subject_path.to_s.start_with?("#{tap.cask_dir}/")
     name         = is_cask ? "cask" : "formula"
 
     new_package = get_package(tap, subject_name, subject_path, new_contents)
@@ -241,8 +243,8 @@ module Homebrew
       files.each do |file|
         files_to_commits[file] ||= []
         files_to_commits[file] << commit
-        tap_file = tap.path/file
-        if (tap_file.dirname == tap.formula_dir || tap_file.dirname == tap.cask_dir) &&
+        tap_file = (tap.path/file).to_s
+        if (tap_file.start_with?("#{tap.formula_dir}/") || tap_file.start_with?("#{tap.cask_dir}/")) &&
            File.extname(file) == ".rb"
           next
         end
@@ -311,7 +313,7 @@ module Homebrew
   end
 
   def self.formulae_need_bottles?(tap, original_commit, labels, args:)
-    return if args.dry_run?
+    return false if args.dry_run?
 
     return false if labels.include?("CI-syntax-only") || labels.include?("CI-no-bottles")
 
@@ -406,14 +408,13 @@ module Homebrew
   def self.pr_pull
     args = pr_pull_args.parse
 
-    odeprecated "`brew pr-pull --no-autosquash`" if args.no_autosquash?
-
     # Needed when extracting the CI artifact.
     ensure_executable!("unzip", reason: "extracting CI artifacts")
 
     workflows = args.workflows.presence || ["tests.yml"]
     artifact = args.artifact || "bottles"
     tap = Tap.fetch(args.tap || CoreTap.instance.name)
+    raise TapUnavailableError, tap.name unless tap.installed?
 
     Utils::Git.set_name_email!(committer: args.committer.blank?)
     Utils::Git.setup_gpg!
@@ -431,7 +432,7 @@ module Homebrew
       odie "Not a GitHub pull request: #{arg}" unless pr
 
       git_repo = tap.git_repo
-      if !git_repo.default_origin_branch? || args.branch_okay? || args.clean?
+      if !git_repo.default_origin_branch? && !args.branch_okay? && !args.no_commit? && !args.no_cherry_pick?
         opoo "Current branch is #{git_repo.branch_name}: do you need to pull inside #{git_repo.origin_branch_name}?"
       end
 

@@ -37,7 +37,7 @@ module Homebrew
                           "non-migrated versions. When installing casks, overwrite existing files " \
                           "(binaries and symlinks are excluded, unless originally from the same cask)."
       switch "-v", "--verbose",
-             description: "Print the verification and postinstall steps."
+             description: "Print the verification and post-install steps."
       switch "-n", "--dry-run",
              description: "Show what would be installed, but do not actually install anything."
       [
@@ -49,9 +49,9 @@ module Homebrew
           hidden:      true,
         }],
         [:switch, "--ignore-dependencies", {
-          description: "An unsupported Homebrew development flag to skip installing any dependencies of any kind. " \
-                       "If the dependencies are not already present, the formula will have issues. If you're not " \
-                       "developing Homebrew, consider adjusting your PATH rather than using this flag.",
+          description: "An unsupported Homebrew development option to skip installing any dependencies of any " \
+                       "kind. If the dependencies are not already present, the formula will have issues. If you're " \
+                       "not developing Homebrew, consider adjusting your PATH rather than using this option.",
         }],
         [:switch, "--only-dependencies", {
           description: "Install the dependencies with specified options but do not install the " \
@@ -170,6 +170,7 @@ module Homebrew
       # Can't use `replacement: false` because `install_args` are used by
       # `build.rb`. Instead, `hide_from_man_page` and don't do anything with
       # this argument here.
+      # This odisabled should stick around indefinitely.
       odisabled "brew install --env", "`env :std` in specific formula files"
     end
 
@@ -178,16 +179,14 @@ module Homebrew
       next unless name =~ HOMEBREW_TAP_FORMULA_REGEX
 
       tap = Tap.fetch(Regexp.last_match(1), Regexp.last_match(2))
-      next if (tap.core_tap? || tap == "homebrew/cask") && !EnvConfig.no_install_from_api?
-
-      tap.install unless tap.installed?
+      tap.ensure_installed!
     end
 
     if args.ignore_dependencies?
       opoo <<~EOS
-        #{Tty.bold}`--ignore-dependencies` is an unsupported Homebrew developer flag!#{Tty.reset}
+        #{Tty.bold}`--ignore-dependencies` is an unsupported Homebrew developer option!#{Tty.reset}
         Adjust your PATH to put any preferred versions of applications earlier in the
-        PATH rather than using this unsupported flag!
+        PATH rather than using this unsupported option!
 
       EOS
     end
@@ -196,7 +195,11 @@ module Homebrew
       formulae, casks = args.named.to_formulae_and_casks
                             .partition { |formula_or_cask| formula_or_cask.is_a?(Formula) }
     rescue FormulaOrCaskUnavailableError, Cask::CaskUnavailableError
-      retry if Tap.install_default_cask_tap_if_necessary(force: args.cask?)
+      cask_tap = CoreCaskTap.instance
+      if !cask_tap.installed? && (args.cask? || Tap.untapped_official_taps.exclude?(cask_tap.name))
+        cask_tap.ensure_installed!
+        retry if cask_tap.installed?
+      end
 
       raise
     end
@@ -225,18 +228,36 @@ module Homebrew
 
       require "cask/installer"
 
-      casks.each do |cask|
-        Cask::Installer.new(cask,
-                            binaries:       args.binaries?,
-                            verbose:        args.verbose?,
-                            force:          args.force?,
-                            adopt:          args.adopt?,
-                            require_sha:    args.require_sha?,
-                            skip_cask_deps: args.skip_cask_deps?,
-                            quarantine:     args.quarantine?,
-                            quiet:          args.quiet?).install
-      rescue Cask::CaskAlreadyInstalledError => e
-        opoo e.message
+      installed_casks, new_casks = casks.partition(&:installed?)
+
+      new_casks.each do |cask|
+        Cask::Installer.new(
+          cask,
+          binaries:       args.binaries?,
+          verbose:        args.verbose?,
+          force:          args.force?,
+          adopt:          args.adopt?,
+          require_sha:    args.require_sha?,
+          skip_cask_deps: args.skip_cask_deps?,
+          quarantine:     args.quarantine?,
+          quiet:          args.quiet?,
+        ).install
+      end
+
+      if !Homebrew::EnvConfig.no_install_upgrade? && installed_casks.any?
+        require "cask/upgrade"
+
+        Cask::Upgrade.upgrade_casks(
+          *installed_casks,
+          force:          args.force?,
+          dry_run:        args.dry_run?,
+          binaries:       args.binaries?,
+          quarantine:     args.quarantine?,
+          require_sha:    args.require_sha?,
+          skip_cask_deps: args.skip_cask_deps?,
+          verbose:        args.verbose?,
+          args:           args,
+        )
       end
     end
 
@@ -318,7 +339,7 @@ module Homebrew
     # Need to rescue before `FormulaUnavailableError` (superclass of this)
     # is handled, as searching for a formula doesn't make sense here (the
     # formula was found, but there's a problem with its implementation).
-    $stderr.puts e.backtrace if Homebrew::EnvConfig.developer?
+    $stderr.puts Utils::Backtrace.clean(e) if Homebrew::EnvConfig.developer?
     ofail e.message
   rescue FormulaOrCaskUnavailableError, Cask::CaskUnavailableError => e
     Homebrew.failed = true

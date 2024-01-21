@@ -19,10 +19,10 @@ module Homebrew
         and binaries for <cask>s. For files, also print SHA-256 checksums.
       EOS
       flag   "--os=",
-             description: "Download for the given operating system." \
+             description: "Download for the given operating system. " \
                           "(Pass `all` to download for all operating systems.)"
       flag   "--arch=",
-             description: "Download for the given CPU architecture." \
+             description: "Download for the given CPU architecture. " \
                           "(Pass `all` to download for all architectures.)"
       flag   "--bottle-tag=",
              description: "Download a bottle for given tag."
@@ -99,8 +99,7 @@ module Homebrew
 
         os_arch_combinations.each do |os, arch|
           SimulateSystem.with os: os, arch: arch do
-            Formulary.clear_cache
-            formula = Formulary.factory(ref)
+            formula = Formulary.factory(ref, args.HEAD? ? :head : :stable)
 
             formula.print_tap_action verb: "Fetching"
 
@@ -116,7 +115,6 @@ module Homebrew
               begin
                 formula.clear_cache if args.force?
 
-                # TODO: Deprecate `--bottle-tag`.
                 bottle_tag = if (bottle_tag = args.bottle_tag&.to_sym)
                   Utils::Bottles::Tag.from_symbol(bottle_tag)
                 else
@@ -130,7 +128,12 @@ module Homebrew
                   next
                 end
 
-                formula.fetch_bottle_tab
+                begin
+                  bottle.fetch_tab
+                rescue DownloadError
+                  retry if retry_fetch?(bottle, args: args)
+                  raise
+                end
                 fetch_formula(bottle, args: args)
               rescue Interrupt
                 raise
@@ -166,6 +169,11 @@ module Homebrew
 
           SimulateSystem.with os: os, arch: arch do
             cask = Cask::CaskLoader.load(ref)
+
+            if cask.url.nil? || cask.sha256.nil?
+              opoo "Cask #{cask} is not supported on os #{os} and arch #{arch}"
+              next
+            end
 
             quarantine = args.quarantine?
             quarantine = true if quarantine.nil?

@@ -1,6 +1,7 @@
 # typed: true
 # frozen_string_literal: true
 
+require "attrable"
 require "cask/cask_loader"
 require "cask/config"
 require "cask/dsl"
@@ -14,7 +15,7 @@ module Cask
   # @api private
   class Cask
     extend Forwardable
-    extend Predicable
+    extend Attrable
     extend APIHashable
     include Metadata
 
@@ -23,14 +24,17 @@ module Cask
 
     attr_predicate :loaded_from_api?
 
-    def self.all
-      # TODO: ideally avoid using ARGV by moving to e.g. CLI::Parser
-      if ARGV.exclude?("--eval-all") && !Homebrew::EnvConfig.eval_all?
-        odeprecated "Cask::Cask#all without --all or HOMEBREW_EVAL_ALL"
+    # @api private
+    def self.all(eval_all: false)
+      if !eval_all && !Homebrew::EnvConfig.eval_all?
+        raise ArgumentError, "Cask::Cask#all cannot be used without --eval-all or HOMEBREW_EVAL_ALL"
       end
 
-      Tap.flat_map(&:cask_files).map do |f|
-        CaskLoader::FromTapPathLoader.new(f).load(config: nil)
+      # Load core casks from tokens so they load from the API when the core cask is not tapped.
+      tokens_and_files = CoreCaskTap.instance.cask_tokens
+      tokens_and_files += Tap.reject(&:core_cask_tap?).flat_map(&:cask_files)
+      tokens_and_files.map do |token_or_file|
+        CaskLoader.load(token_or_file)
       rescue CaskUnreadableError => e
         opoo e.message
 
@@ -121,7 +125,7 @@ module Cask
 
     def full_name
       return token if tap.nil?
-      return token if tap.user == "Homebrew"
+      return token if tap.core_cask_tap?
 
       "#{tap.name}/#{token}"
     end
@@ -210,43 +214,42 @@ module Cask
     end
 
     def outdated?(greedy: false, greedy_latest: false, greedy_auto_updates: false)
-      !outdated_versions(greedy: greedy, greedy_latest: greedy_latest,
-                         greedy_auto_updates: greedy_auto_updates).empty?
+      !outdated_version(greedy: greedy, greedy_latest: greedy_latest,
+                        greedy_auto_updates: greedy_auto_updates).nil?
     end
 
-    # TODO: Rename to `outdated_version` and only return one version.
-    def outdated_versions(greedy: false, greedy_latest: false, greedy_auto_updates: false)
+    def outdated_version(greedy: false, greedy_latest: false, greedy_auto_updates: false)
       # special case: tap version is not available
-      return [] if version.nil?
+      return if version.nil?
 
       if version.latest?
-        return [installed_version] if (greedy || greedy_latest) && outdated_download_sha?
+        return installed_version if (greedy || greedy_latest) && outdated_download_sha?
 
-        return []
+        return
       elsif auto_updates && !greedy && !greedy_auto_updates
-        return []
+        return
       end
 
       # not outdated unless there is a different version on tap
-      return [] if installed_version == version
+      return if installed_version == version
 
-      [installed_version]
+      installed_version
     end
 
     def outdated_info(greedy, verbose, json, greedy_latest, greedy_auto_updates)
       return token if !verbose && !json
 
-      installed_versions = outdated_versions(greedy: greedy, greedy_latest: greedy_latest,
-                                             greedy_auto_updates: greedy_auto_updates).join(", ")
+      installed_version = outdated_version(greedy: greedy, greedy_latest: greedy_latest,
+                                           greedy_auto_updates: greedy_auto_updates).to_s
 
       if json
         {
           name:               token,
-          installed_versions: installed_versions,
+          installed_versions: [installed_version],
           current_version:    version,
         }
       else
-        "#{token} (#{installed_versions}) != #{version}"
+        "#{token} (#{installed_version}) != #{version}"
       end
     end
 
@@ -276,7 +279,7 @@ module Cask
     def populate_from_api!(json_cask)
       raise ArgumentError, "Expected cask to be loaded from the API" unless loaded_from_api?
 
-      @languages = json_cask[:languages]
+      @languages = json_cask.fetch(:languages, [])
       @tap_git_head = json_cask.fetch(:tap_git_head, "HEAD")
 
       @ruby_source_path = json_cask[:ruby_source_path]
@@ -322,6 +325,7 @@ module Cask
         "appcast"              => appcast,
         "version"              => version,
         "installed"            => installed_version,
+        "installed_time"       => install_time&.to_i,
         "outdated"             => outdated?,
         "sha256"               => sha256,
         "artifacts"            => artifacts_list,
@@ -330,6 +334,12 @@ module Cask
         "conflicts_with"       => conflicts_with,
         "container"            => container&.pairs,
         "auto_updates"         => auto_updates,
+        "deprecated"           => deprecated?,
+        "deprecation_date"     => deprecation_date,
+        "deprecation_reason"   => deprecation_reason,
+        "disabled"             => disabled?,
+        "disable_date"         => disable_date,
+        "disable_reason"       => disable_reason,
         "tap_git_head"         => tap_git_head,
         "languages"            => languages,
         "ruby_source_path"     => ruby_source_path,
@@ -339,7 +349,7 @@ module Cask
 
     def to_hash_with_variations
       if loaded_from_api? && !Homebrew::EnvConfig.no_install_from_api?
-        return api_to_local_hash(Homebrew::API::Cask.all_casks[token])
+        return api_to_local_hash(Homebrew::API::Cask.all_casks[token].dup)
       end
 
       hash = to_h

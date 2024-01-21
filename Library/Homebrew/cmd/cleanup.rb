@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 require "cleanup"
@@ -33,6 +33,7 @@ module Homebrew
     end
   end
 
+  sig { void }
   def cleanup
     args = cleanup_args.parse
 
@@ -53,7 +54,7 @@ module Homebrew
       return
     end
 
-    cleanup.clean!
+    cleanup.clean!(quiet: args.quiet?, periodic: false)
 
     unless cleanup.disk_cleanup_size.zero?
       disk_space = disk_usage_readable(cleanup.disk_cleanup_size)

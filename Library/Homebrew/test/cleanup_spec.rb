@@ -181,8 +181,8 @@ describe Homebrew::Cleanup do
       it "removes the download for the latest version after 30 days" do
         download = Cask::Cache.path/"#{cask.token}--#{cask.version}"
 
-        allow(download).to receive(:ctime).and_return((DateTime.now - 30).to_time - (60 * 60))
-        allow(download).to receive(:mtime).and_return((DateTime.now - 30).to_time - (60 * 60))
+        allow(download).to receive_messages(ctime: (DateTime.now - 30).to_time - (60 * 60),
+                                            mtime: (DateTime.now - 30).to_time - (60 * 60))
 
         cleanup.cleanup_cask(cask)
 
@@ -333,7 +333,7 @@ describe Homebrew::Cleanup do
         FileUtils.touch testball
         FileUtils.touch testball_resource
         (HOMEBREW_CELLAR/"testball"/"0.0.1").mkpath
-        FileUtils.touch(CoreTap.instance.formula_dir/"testball.rb")
+        FileUtils.touch(CoreTap.instance.new_formula_path("testball"))
       end
 
       it "cleans up file if outdated" do

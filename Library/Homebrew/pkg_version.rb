@@ -10,7 +10,7 @@ class PkgVersion
   include Comparable
   extend Forwardable
 
-  REGEX = /\A(.+?)(?:_(\d+))?\z/.freeze
+  REGEX = /\A(.+?)(?:_(\d+))?\z/
   private_constant :REGEX
 
   attr_reader :version, :revision
@@ -19,7 +19,7 @@ class PkgVersion
 
   def self.parse(path)
     _, version, revision = *path.match(REGEX)
-    version = Version.create(version)
+    version = Version.new(version)
     new(version, revision.to_i)
   end
 

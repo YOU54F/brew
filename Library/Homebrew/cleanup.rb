@@ -3,6 +3,7 @@
 
 require "utils/bottles"
 
+require "attrable"
 require "formula"
 require "cask/cask_loader"
 require "set"
@@ -30,6 +31,7 @@ module Homebrew
           glide_home
           java_cache
           npm_cache
+          pip_cache
           gclient_cache
         ].include?(pathname.basename.to_s)
       end
@@ -175,7 +177,7 @@ module Homebrew
       end
     end
 
-    extend Predicable
+    extend Attrable
 
     PERIODIC_CLEAN_FILE = (HOMEBREW_CACHE/".cleaned").freeze
 
@@ -230,7 +232,7 @@ module Homebrew
       return false if no_cleanup_formula.blank?
 
       @skip_clean_formulae ||= no_cleanup_formula.split(",")
-      @skip_clean_formulae.include?(formula.name) || (@skip_clean_formulae & formula.aliases).present?
+      @skip_clean_formulae.include?(formula.name) || @skip_clean_formulae.intersect?(formula.aliases)
     end
 
     def self.periodic_clean_due?
@@ -476,11 +478,24 @@ module Homebrew
 
       return if portable_rubies_to_remove.empty?
 
-      bundler_path = vendor_dir/"bundle/ruby"
-      if dry_run?
-        puts Utils.popen_read("git", "-C", HOMEBREW_REPOSITORY, "clean", "-nx", bundler_path).chomp
-      else
-        puts Utils.popen_read("git", "-C", HOMEBREW_REPOSITORY, "clean", "-ffqx", bundler_path).chomp
+      bundler_paths = (vendor_dir/"bundle/ruby").children.select do |child|
+        basename = child.basename.to_s
+
+        next false if basename == ".homebrew_gem_groups"
+        next true unless child.directory?
+
+        [
+          "#{Version.new(portable_ruby_latest_version).major_minor}.0",
+          RbConfig::CONFIG["ruby_version"],
+        ].uniq.exclude?(basename)
+      end
+
+      bundler_paths.each do |bundler_path|
+        if dry_run?
+          puts Utils.popen_read("git", "-C", HOMEBREW_REPOSITORY, "clean", "-nx", bundler_path).chomp
+        else
+          puts Utils.popen_read("git", "-C", HOMEBREW_REPOSITORY, "clean", "-ffqx", bundler_path).chomp
+        end
       end
 
       portable_rubies_to_remove.each do |portable_ruby|
@@ -488,7 +503,9 @@ module Homebrew
       end
     end
 
-    def use_system_ruby?; end
+    def use_system_ruby?
+      false
+    end
 
     def cleanup_bootsnap
       bootsnap = cache/"bootsnap"

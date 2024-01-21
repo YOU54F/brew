@@ -12,29 +12,30 @@ module Commands
   # If you are going to change anything in below hash,
   # be sure to also update appropriate case statement in brew.sh
   HOMEBREW_INTERNAL_COMMAND_ALIASES = {
-    "ls"          => "list",
-    "homepage"    => "home",
-    "-S"          => "search",
-    "up"          => "update",
-    "ln"          => "link",
-    "instal"      => "install", # gem does the same
-    "uninstal"    => "uninstall",
-    "rm"          => "uninstall",
-    "remove"      => "uninstall",
-    "abv"         => "info",
-    "dr"          => "doctor",
-    "--repo"      => "--repository",
-    "environment" => "--env",
-    "--config"    => "config",
-    "-v"          => "--version",
-    "lc"          => "livecheck",
-    "tc"          => "typecheck",
+    "ls"           => "list",
+    "homepage"     => "home",
+    "-S"           => "search",
+    "up"           => "update",
+    "ln"           => "link",
+    "instal"       => "install", # gem does the same
+    "uninstal"     => "uninstall",
+    "post_install" => "postinstall",
+    "rm"           => "uninstall",
+    "remove"       => "uninstall",
+    "abv"          => "info",
+    "dr"           => "doctor",
+    "--repo"       => "--repository",
+    "environment"  => "--env",
+    "--config"     => "config",
+    "-v"           => "--version",
+    "lc"           => "livecheck",
+    "tc"           => "typecheck",
   }.freeze
   # This pattern is used to split descriptions at full stops. We only consider a
   # dot as a full stop if it is either followed by a whitespace or at the end of
   # the description. In this way we can prevent cutting off a sentence in the
   # middle due to dots in URLs or paths.
-  DESCRIPTION_SPLITTING_PATTERN = /\.(?>\s|$)/.freeze
+  DESCRIPTION_SPLITTING_PATTERN = /\.(?>\s|$)/
 
   def self.valid_internal_cmd?(cmd)
     require?(HOMEBREW_CMD_PATH/cmd)
@@ -54,7 +55,7 @@ module Commands
   def self.args_method_name(cmd_path)
     cmd_path_basename = basename_without_extension(cmd_path)
     cmd_method_prefix = method_name(cmd_path_basename)
-    "#{cmd_method_prefix}_args".to_sym
+    :"#{cmd_method_prefix}_args"
   end
 
   def self.internal_cmd_path(cmd)
@@ -216,12 +217,12 @@ module Commands
       # skip the comment's initial usage summary lines
       comment_lines.slice(2..-1)&.each do |line|
         match_data = /^#:  (?<desc>\w.*+)$/.match(line)
-        if match_data
-          desc = match_data[:desc]
-          return T.must(desc).split(DESCRIPTION_SPLITTING_PATTERN).first if short
+        next unless match_data
 
-          return desc
-        end
+        desc = match_data[:desc]
+        return T.must(desc).split(DESCRIPTION_SPLITTING_PATTERN).first if short
+
+        return desc
       end
     end
   end

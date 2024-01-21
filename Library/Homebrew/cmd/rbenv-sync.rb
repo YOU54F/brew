@@ -11,7 +11,7 @@ module Homebrew
   def rbenv_sync_args
     Homebrew::CLI::Parser.new do
       description <<~EOS
-        Create symlinks for Homebrew's installed Ruby versions in ~/.rbenv/versions.
+        Create symlinks for Homebrew's installed Ruby versions in `~/.rbenv/versions`.
 
         Note that older version symlinks will also be created so e.g. Ruby 3.2.1 will
         also be symlinked to 3.2.0.
@@ -23,28 +23,30 @@ module Homebrew
 
   sig { void }
   def rbenv_sync
-    dot_rbenv = Pathname(Dir.home)/".rbenv"
+    rbenv_root = Pathname(ENV.fetch("HOMEBREW_RBENV_ROOT", Pathname(Dir.home)/".rbenv"))
 
     # Don't run multiple times at once.
-    rbenv_sync_running = dot_rbenv/".rbenv_sync_running"
+    rbenv_sync_running = rbenv_root/".rbenv_sync_running"
     return if rbenv_sync_running.exist?
 
-    rbenv_versions = dot_rbenv/"versions"
-    rbenv_versions.mkpath
-    FileUtils.touch rbenv_sync_running
+    begin
+      rbenv_versions = rbenv_root/"versions"
+      rbenv_versions.mkpath
+      FileUtils.touch rbenv_sync_running
 
-    rbenv_sync_args.parse
+      rbenv_sync_args.parse
 
-    HOMEBREW_CELLAR.glob("ruby{,@*}")
-                   .flat_map(&:children)
-                   .each { |path| link_rbenv_versions(path, rbenv_versions) }
+      HOMEBREW_CELLAR.glob("ruby{,@*}")
+                     .flat_map(&:children)
+                     .each { |path| link_rbenv_versions(path, rbenv_versions) }
 
-    rbenv_versions.children
-                  .select(&:symlink?)
-                  .reject(&:exist?)
-                  .each { |path| FileUtils.rm_f path }
-  ensure
-    rbenv_sync_running.unlink if rbenv_sync_running.exist?
+      rbenv_versions.children
+                    .select(&:symlink?)
+                    .reject(&:exist?)
+                    .each { |path| FileUtils.rm_f path }
+    ensure
+      rbenv_sync_running.unlink if rbenv_sync_running.exist?
+    end
   end
 
   sig { params(path: Pathname, rbenv_versions: Pathname).void }

@@ -4,6 +4,7 @@
 require "time"
 
 require "utils/analytics"
+require "utils/backtrace"
 require "utils/curl"
 require "utils/fork"
 require "utils/formatter"
@@ -42,8 +43,9 @@ module Homebrew
 
   def self.system(cmd, *args, **options)
     if verbose?
-      puts "#{cmd} #{args * " "}".gsub(RUBY_PATH, "ruby")
-                                 .gsub($LOAD_PATH.join(File::PATH_SEPARATOR).to_s, "$LOAD_PATH")
+      out = (options[:out] == :err) ? $stderr : $stdout
+      out.puts "#{cmd} #{args * " "}".gsub(RUBY_PATH, "ruby")
+                                     .gsub($LOAD_PATH.join(File::PATH_SEPARATOR).to_s, "$LOAD_PATH")
     end
     _system(cmd, *args, **options)
   end
@@ -165,5 +167,18 @@ module Utils
     word.tr!("-", "_")
     word.downcase!
     word
+  end
+
+  SAFE_FILENAME_REGEX = /[[:cntrl:]#{Regexp.escape("#{File::SEPARATOR}#{File::ALT_SEPARATOR}")}]/o
+  private_constant :SAFE_FILENAME_REGEX
+
+  sig { params(basename: String).returns(T::Boolean) }
+  def self.safe_filename?(basename)
+    !SAFE_FILENAME_REGEX.match?(basename)
+  end
+
+  sig { params(basename: String).returns(String) }
+  def self.safe_filename(basename)
+    basename.gsub(SAFE_FILENAME_REGEX, "")
   end
 end

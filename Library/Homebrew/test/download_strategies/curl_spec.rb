@@ -36,11 +36,11 @@ describe CurlDownloadStrategy do
 
     it "calls curl with default arguments" do
       expect(strategy).to receive(:curl).with(
+        "--remote-time",
+        "--output", an_instance_of(Pathname),
         # example.com supports partial requests.
         "--continue-at", "-",
         "--location",
-        "--remote-time",
-        "--output", an_instance_of(Pathname),
         url,
         an_instance_of(Hash)
       )
@@ -75,7 +75,7 @@ describe CurlDownloadStrategy do
             /curl/,
             hash_including(args: array_including_cons(
               "--user-agent",
-              a_string_matching(/Mozilla.*Mac OS X 10.*AppleWebKit/),
+              a_string_matching(/Mozilla.*Mac OS X 10_15_7.*AppleWebKit/),
             )),
           )
           .at_least(:once)

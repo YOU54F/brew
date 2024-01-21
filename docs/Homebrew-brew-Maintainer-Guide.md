@@ -41,7 +41,7 @@ There are many checks that run on every PR. The following is a quick list of the
 - `CI / vendored gems`: This checks whether there was a change to the vendored gems on Linux that needs to be committed to the PR branch.
 - `CI / test default formula (Linux)`: This runs `brew test-bot` on Linux to ensure it still works as expected.
 - `CI / syntax`: This is run first to check whether the PR passes `brew style` and `brew typecheck`. If this job fails the following jobs will not run.
-- `CI / tap syntax`: This runs `brew style` and `brew audit` on all official taps (note that although this runs on Linux, it does check all cask repos).
+- `CI / tap syntax`: This runs `brew style` and `brew audit` on all official taps (note that although this runs on Linux, it does check all cask repositories).
 - `CI / docker`: This builds and deploys a new Homebrew Docker image to GitHub Packages and Docker Hub.
 - `CI / test everything (macOS)`: This runs several checks on macOS including `brew tests`, `brew update-tests`, `brew test-bot --only-formulae --test-default-formula`, `brew readall` and `brew doctor`.
 - `CI / tests (generic OS)` and `CI / tests (Linux)`: These run `brew tests` with various options on Linux.
@@ -57,11 +57,11 @@ Codecov should be used as a guide to indicate when more tests are probably neede
 
 ### `brew tests` and BuildPulse
 
-BuildPulse monitors CI jobs for every push to `Homebrew/brew` to detect flaky tests and track them over time. The reports are available to Homebrew maintainers on [buildpulse.io](https://buildpulse.io/@Homebrew) and daily summaries are published to [`#buildpulse-health`](https://machomebrew.slack.com/archives/C0268BSJBJ8) in Slack.
+BuildPulse monitors CI jobs for every push to `Homebrew/brew` to detect flaky tests and track them over time. The reports are available to Homebrew maintainers on [buildpulse.io](https://app.buildpulse.io/@Homebrew) and daily summaries are published to [`#buildpulse-health`](https://machomebrew.slack.com/archives/C0268BSJBJ8) in Slack.
 
 BuildPulse can be used as a guide to identify which flaky tests are causing the most disruption to the CI suite. To make the biggest improvements to the reliability of the build, we can focus on the most disruptive flaky tests first (i.e. the tests causing the most intermittent failures).
 
-To help find the root cause for a particular flaky test, buildpulse.io provides links to the most recent CI job and commit where the test failed and then passed with no change to the underlying code. You may want to check out the code at that commit to attempt to reproduce the failure locally. You can also see the list of recent failures on [buildpulse.io](https://buildpulse.io/@Homebrew) to determine if the test always fails the same way.
+To help find the root cause for a particular flaky test, buildpulse.io provides links to the most recent CI job and commit where the test failed and then passed with no change to the underlying code. You may want to check out the code at that commit to attempt to reproduce the failure locally. You can also see the list of recent failures on [buildpulse.io](https://app.buildpulse.io/@Homebrew) to determine if the test always fails the same way.
 
 ## Manpages and Shell Completions
 

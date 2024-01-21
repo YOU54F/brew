@@ -24,7 +24,7 @@ describe Cask::Cask, :cask do
   end
 
   describe "load" do
-    let(:tap_path) { Tap.default_cask_tap.path }
+    let(:tap_path) { CoreCaskTap.instance.path }
     let(:file_dirname) { Pathname.new(__FILE__).dirname }
     let(:relative_tap_path) { tap_path.relative_path_from(file_dirname) }
 
@@ -41,7 +41,7 @@ describe Cask::Cask, :cask do
     end
 
     it "returns an instance of the Cask from a JSON file" do
-      c = Cask::CaskLoader.load("#{tap_path}/caffeine.json")
+      c = Cask::CaskLoader.load("#{TEST_FIXTURE_DIR}/cask/caffeine.json")
       expect(c).to be_a(described_class)
       expect(c.token).to eq("caffeine")
     end
@@ -89,17 +89,17 @@ describe Cask::Cask, :cask do
     it "ignores the Casks that have auto_updates true (without --greedy)" do
       c = Cask::CaskLoader.load("auto-updates")
       expect(c).not_to be_outdated
-      expect(c.outdated_versions).to be_empty
+      expect(c.outdated_version).to be_nil
     end
 
     it "ignores the Casks that have version :latest (without --greedy)" do
       c = Cask::CaskLoader.load("version-latest-string")
       expect(c).not_to be_outdated
-      expect(c.outdated_versions).to be_empty
+      expect(c.outdated_version).to be_nil
     end
 
     describe "versioned casks" do
-      subject { cask.outdated_versions }
+      subject { cask.outdated_version }
 
       let(:cask) { described_class.new("basic-cask") }
 
@@ -107,9 +107,9 @@ describe Cask::Cask, :cask do
         expectations.each do |installed_version, expected_output|
           context "when version #{installed_version.inspect} is installed and the tap version is #{tap_version}" do
             it {
-              allow(cask).to receive(:installed_version).and_return(installed_version)
-              allow(cask).to receive(:version).and_return(Cask::DSL::Version.new(tap_version))
-              expect(cask).to receive(:outdated_versions).and_call_original
+              allow(cask).to receive_messages(installed_version: installed_version,
+                                              version:           Cask::DSL::Version.new(tap_version))
+              expect(cask).to receive(:outdated_version).and_call_original
               expect(subject).to eq expected_output
             }
           end
@@ -118,13 +118,13 @@ describe Cask::Cask, :cask do
 
       describe "installed version is equal to tap version => not outdated" do
         include_examples "versioned casks", "1.2.3",
-                         "1.2.3" => []
+                         "1.2.3" => nil
       end
 
       describe "installed version is different than tap version => outdated" do
         include_examples "versioned casks", "1.2.4",
-                         "1.2.3" => ["1.2.3"],
-                         "1.2.4" => []
+                         "1.2.3" => "1.2.3",
+                         "1.2.4" => nil
       end
     end
 
@@ -136,13 +136,13 @@ describe Cask::Cask, :cask do
           context "when versions #{installed_version} are installed and the " \
                   "tap version is #{tap_version}, #{"not " unless greedy}greedy " \
                   "and sha is #{"not " unless outdated_sha}outdated" do
-            subject { cask.outdated_versions(greedy: greedy) }
+            subject { cask.outdated_version(greedy: greedy) }
 
             it {
-              allow(cask).to receive(:installed_version).and_return(installed_version)
-              allow(cask).to receive(:version).and_return(Cask::DSL::Version.new(tap_version))
-              allow(cask).to receive(:outdated_download_sha?).and_return(outdated_sha)
-              expect(cask).to receive(:outdated_versions).and_call_original
+              allow(cask).to receive_messages(installed_version:      installed_version,
+                                              version:                Cask::DSL::Version.new(tap_version),
+                                              outdated_download_sha?: outdated_sha)
+              expect(cask).to receive(:outdated_version).and_call_original
               expect(subject).to eq expected_output
             }
           end
@@ -151,29 +151,29 @@ describe Cask::Cask, :cask do
 
       describe ":latest version installed, :latest version in tap" do
         include_examples ":latest cask", false, false, "latest",
-                         "latest" => []
+                         "latest" => nil
         include_examples ":latest cask", true, false, "latest",
-                         "latest" => []
+                         "latest" => nil
         include_examples ":latest cask", true, true, "latest",
-                         "latest" => ["latest"]
+                         "latest" => "latest"
       end
 
       describe "numbered version installed, :latest version in tap" do
         include_examples ":latest cask", false, false, "latest",
-                         "1.2.3" => []
+                         "1.2.3" => nil
         include_examples ":latest cask", true, false, "latest",
-                         "1.2.3" => []
+                         "1.2.3" => nil
         include_examples ":latest cask", true, true, "latest",
-                         "1.2.3" => ["1.2.3"]
+                         "1.2.3" => "1.2.3"
       end
 
       describe "latest version installed, numbered version in tap" do
         include_examples ":latest cask", false, false, "1.2.3",
-                         "latest" => ["latest"]
+                         "latest" => "latest"
         include_examples ":latest cask", true, false, "1.2.3",
-                         "latest" => ["latest"]
+                         "latest" => "latest"
         include_examples ":latest cask", true, true, "1.2.3",
-                         "latest" => ["latest"]
+                         "latest" => "latest"
       end
     end
   end

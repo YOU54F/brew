@@ -13,6 +13,7 @@ describe Formula do
   alias_matcher :have_changed_alias, :be_alias_changed
 
   alias_matcher :have_option_defined, :be_option_defined
+  alias_matcher :have_post_install_defined, :be_post_install_defined
   alias_matcher :have_test_defined, :be_test_defined
   alias_matcher :pour_bottle, :be_pour_bottle
 
@@ -150,12 +151,11 @@ describe Formula do
 
     before do
       # don't try to load/fetch gcc/glibc
-      allow(DevelopmentTools).to receive(:needs_libc_formula?).and_return(false)
-      allow(DevelopmentTools).to receive(:needs_compiler_formula?).and_return(false)
+      allow(DevelopmentTools).to receive_messages(needs_libc_formula?: false, needs_compiler_formula?: false)
 
       allow(Formulary).to receive(:load_formula_from_path).with(f2.name, f2.path).and_return(f2)
       allow(Formulary).to receive(:factory).with(f2.name).and_return(f2)
-      allow(f.tap).to receive(:versioned_formula_files).and_return([f2.path])
+      allow(f).to receive(:versioned_formulae_names).and_return([f2.name])
     end
 
     it "returns array with versioned formulae" do
@@ -428,7 +428,7 @@ describe Formula do
 
     example "alias paths with tab with non alias source path" do
       alias_path = (CoreTap.instance.alias_dir/"another_name")
-      source_path = (CoreTap.instance.formula_dir/"another_other_name")
+      source_path = CoreTap.instance.new_formula_path("another_other_name")
 
       f = formula alias_path: alias_path do
         url "foo-1.0"
@@ -462,6 +462,26 @@ describe Formula do
       end
 
       expect { f.inreplace([]) }.to raise_error(BuildError)
+    end
+
+    specify "replaces text in file" do
+      file = Tempfile.new("test")
+      File.binwrite(file, <<~EOS)
+        ab
+        bc
+        cd
+      EOS
+      f = formula do
+        url "https://brew.sh/test-1.0.tbz"
+      end
+      f.inreplace(file.path) do |s|
+        s.gsub!("bc", "yz")
+      end
+      expect(File.binread(file)).to eq <<~EOS
+        ab
+        yz
+        cd
+      EOS
     end
   end
 
@@ -520,10 +540,10 @@ describe Formula do
     end
 
     expect(f.homepage).to eq("https://brew.sh")
-    expect(f.version).to eq(Version.create("0.1"))
+    expect(f.version).to eq(Version.new("0.1"))
     expect(f).to be_stable
-    expect(f.stable.version).to eq(Version.create("0.1"))
-    expect(f.head.version).to eq(Version.create("HEAD"))
+    expect(f.stable.version).to eq(Version.new("0.1"))
+    expect(f.head.version).to eq(Version.new("HEAD"))
   end
 
   specify "#active_spec=" do
@@ -623,7 +643,7 @@ describe Formula do
 
     f.update_head_version
 
-    expect(f.head.version).to eq(Version.create("HEAD-5658946"))
+    expect(f.head.version).to eq(Version.new("HEAD-5658946"))
   end
 
   specify "#desc" do
@@ -634,6 +654,23 @@ describe Formula do
     end
 
     expect(f.desc).to eq("a formula")
+  end
+
+  specify "#post_install_defined?" do
+    f1 = formula do
+      url "foo-1.0"
+
+      def post_install
+        # do nothing
+      end
+    end
+
+    f2 = formula do
+      url "foo-1.0"
+    end
+
+    expect(f1).to have_post_install_defined
+    expect(f2).not_to have_post_install_defined
   end
 
   specify "test fixtures" do
@@ -760,8 +797,7 @@ describe Formula do
 
   specify "dependencies" do
     # don't try to load/fetch gcc/glibc
-    allow(DevelopmentTools).to receive(:needs_libc_formula?).and_return(false)
-    allow(DevelopmentTools).to receive(:needs_compiler_formula?).and_return(false)
+    allow(DevelopmentTools).to receive_messages(needs_libc_formula?: false, needs_compiler_formula?: false)
 
     f1 = formula "f1" do
       url "f1-1.0"
@@ -806,12 +842,13 @@ describe Formula do
       tap_loader = double
 
       # don't try to load/fetch gcc/glibc
-      allow(DevelopmentTools).to receive(:needs_libc_formula?).and_return(false)
-      allow(DevelopmentTools).to receive(:needs_compiler_formula?).and_return(false)
+      allow(DevelopmentTools).to receive_messages(needs_libc_formula?: false, needs_compiler_formula?: false)
 
       allow(tap_loader).to receive(:get_formula).and_raise(RuntimeError, "tried resolving tap formula")
       allow(Formulary).to receive(:loader_for).with("foo/bar/f1", from: nil).and_return(tap_loader)
-      stub_formula_loader(formula("f2") { url("f2-1.0") }, "baz/qux/f2")
+
+      f2_path = Tap.new("baz", "qux").path/"Formula/f2.rb"
+      stub_formula_loader(formula("f2", path: f2_path) { url("f2-1.0") }, "baz/qux/f2")
 
       f3 = formula "f3" do
         url "f3-1.0"
@@ -822,7 +859,9 @@ describe Formula do
 
       expect(f3.runtime_dependencies.map(&:name)).to eq(["baz/qux/f2"])
 
-      stub_formula_loader(formula("f1") { url("f1-1.0") }, "foo/bar/f1")
+      f1_path = Tap.new("foo", "bar").path/"Formula/f1.rb"
+      stub_formula_loader(formula("f1", path: f1_path) { url("f1-1.0") }, "foo/bar/f1")
+
       f3.build = BuildOptions.new(Options.create(["--with-f1"]), f3.options)
 
       expect(f3.runtime_dependencies.map(&:name)).to eq(["foo/bar/f1", "baz/qux/f2"])
@@ -859,8 +898,7 @@ describe Formula do
 
   specify "requirements" do
     # don't try to load/fetch gcc/glibc
-    allow(DevelopmentTools).to receive(:needs_libc_formula?).and_return(false)
-    allow(DevelopmentTools).to receive(:needs_compiler_formula?).and_return(false)
+    allow(DevelopmentTools).to receive_messages(needs_libc_formula?: false, needs_compiler_formula?: false)
 
     f1 = formula "f1" do
       url "f1-1"
@@ -918,7 +956,7 @@ describe Formula do
   end
 
   describe "#to_hash_with_variations", :needs_macos do
-    let(:formula_path) { CoreTap.new.formula_dir/"foo-variations.rb" }
+    let(:formula_path) { CoreTap.new.new_formula_path("foo-variations") }
     let(:formula_content) do
       <<~RUBY
         class FooVariations < Formula
@@ -985,14 +1023,9 @@ describe Formula do
     end
 
     before do
-      # Use a more limited symbols list to shorten the variations hash
-      symbols = {
-        monterey: "12",
-        big_sur:  "11",
-        catalina: "10.15",
-        mojave:   "10.14",
-      }
-      stub_const("MacOSVersion::SYMBOLS", symbols)
+      # Use a more limited os list to shorten the variations hash
+      os_list = [:monterey, :big_sur, :catalina, :mojave, :linux]
+      stub_const("OnSystem::ALL_OS_ARCH_COMBINATIONS", os_list.product(OnSystem::ARCH_OPTIONS))
 
       # For consistency, always run on Monterey and ARM
       allow(MacOS).to receive(:version).and_return(MacOSVersion.new("12"))

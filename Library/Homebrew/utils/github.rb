@@ -56,10 +56,10 @@ module GitHub
     API.open_rest(url_to("repos", user, repo))
   end
 
-  def self.issues_for_formula(name, tap: CoreTap.instance, tap_remote_repo: tap&.full_name, state: nil)
+  def self.issues_for_formula(name, tap: CoreTap.instance, tap_remote_repo: tap&.full_name, state: nil, type: nil)
     return [] unless tap_remote_repo
 
-    search_issues(name, repo: tap_remote_repo, state: state, in: "title")
+    search_issues(name, repo: tap_remote_repo, state: state, type: type, in: "title")
   end
 
   def self.user
@@ -504,12 +504,14 @@ module GitHub
     response["license"]["spdx_id"]
   rescue API::HTTPNotFoundError
     nil
+  rescue API::AuthenticationFailedError => e
+    raise unless e.message.match?(API::GITHUB_IP_ALLOWLIST_ERROR)
   end
 
   def self.pull_request_title_regex(name, version = nil)
-    return /(^|\s)#{Regexp.quote(name)}(:|,|\s|$)/i.freeze if version.blank?
+    return /(^|\s)#{Regexp.quote(name)}(:|,|\s|$)/i if version.blank?
 
-    /(^|\s)#{Regexp.quote(name)}(:|,|\s)(.*\s)?#{Regexp.quote(version)}(:|,|\s|$)/i.freeze
+    /(^|\s)#{Regexp.quote(name)}(:|,|\s)(.*\s)?#{Regexp.quote(version)}(:|,|\s|$)/i
   end
 
   def self.fetch_pull_requests(name, tap_remote_repo, state: nil, version: nil)
@@ -726,7 +728,7 @@ module GitHub
   def self.last_commit(user, repo, ref, version)
     return if Homebrew::EnvConfig.no_github_api?
 
-    output, _, status = curl_output(
+    output, _, status = Utils::Curl.curl_output(
       "--silent", "--head", "--location",
       "--header", "Accept: application/vnd.github.sha",
       url_to("repos", user, repo, "commits", ref).to_s
@@ -742,9 +744,9 @@ module GitHub
   end
 
   def self.multiple_short_commits_exist?(user, repo, commit)
-    return if Homebrew::EnvConfig.no_github_api?
+    return false if Homebrew::EnvConfig.no_github_api?
 
-    output, _, status = curl_output(
+    output, _, status = Utils::Curl.curl_output(
       "--silent", "--head", "--location",
       "--header", "Accept: application/vnd.github.sha",
       url_to("repos", user, repo, "commits", commit).to_s
@@ -756,7 +758,7 @@ module GitHub
     output[/^Status: (200)/, 1] != "200"
   end
 
-  def self.repo_commits_for_user(nwo, user, filter, args)
+  def self.repo_commits_for_user(nwo, user, filter, args, max)
     return if Homebrew::EnvConfig.no_github_api?
 
     params = ["#{filter}=#{user}"]
@@ -766,20 +768,25 @@ module GitHub
     commits = []
     API.paginate_rest("#{API_URL}/repos/#{nwo}/commits", additional_query_params: params.join("&")) do |result|
       commits.concat(result.map { |c| c["sha"] })
+      if max.present? && commits.length >= max
+        opoo "#{user} exceeded #{max} #{nwo} commits as #{filter}, stopped counting!"
+        break
+      end
     end
     commits
   end
 
-  def self.count_repo_commits(nwo, user, filter, args)
-    return if Homebrew::EnvConfig.no_github_api?
+  def self.count_repo_commits(nwo, user, args, max: nil)
+    odie "Cannot count commits, HOMEBREW_NO_GITHUB_API set!" if Homebrew::EnvConfig.no_github_api?
 
-    author_shas = repo_commits_for_user(nwo, user, "author", args)
-    return author_shas.count if filter == "author"
+    author_shas = repo_commits_for_user(nwo, user, "author", args, max)
+    committer_shas = repo_commits_for_user(nwo, user, "committer", args, max)
+    return [0, 0] if author_shas.blank? && committer_shas.blank?
 
-    committer_shas = repo_commits_for_user(nwo, user, "committer", args)
-    return 0 if committer_shas.empty?
-
+    author_count = author_shas.count
     # Only count commits where the author and committer are different.
-    committer_shas.difference(author_shas).count
+    committer_count = committer_shas.difference(author_shas).count
+
+    [author_count, committer_count]
   end
 end

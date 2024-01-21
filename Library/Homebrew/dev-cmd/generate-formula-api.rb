@@ -11,8 +11,7 @@ module Homebrew
   def generate_formula_api_args
     Homebrew::CLI::Parser.new do
       description <<~EOS
-        Generates Formula API data files for formulae.brew.sh.
-
+        Generate `homebrew/core` API data files for <#{HOMEBREW_API_WWW}>.
         The generated files are written to the current directory.
       EOS
 
@@ -44,6 +43,7 @@ module Homebrew
     args = generate_formula_api_args.parse
 
     tap = CoreTap.instance
+    raise TapUnavailableError, tap.name unless tap.installed?
 
     unless args.dry_run?
       directories = ["_data/formula", "api/formula", "formula"]
@@ -51,25 +51,31 @@ module Homebrew
       FileUtils.mkdir_p directories
     end
 
-    Formulary.enable_factory_cache!
-    Formula.generating_hash!
+    Homebrew.with_no_api_env do
+      tap_migrations_json = JSON.dump(tap.tap_migrations)
+      File.write("api/formula_tap_migrations.json", tap_migrations_json) unless args.dry_run?
 
-    tap.formula_names.each do |name|
-      formula = Formulary.factory(name)
-      name = formula.name
-      json = JSON.pretty_generate(formula.to_hash_with_variations)
+      Formulary.enable_factory_cache!
+      Formula.generating_hash!
 
-      unless args.dry_run?
-        File.write("_data/formula/#{name.tr("+", "_")}.json", "#{json}\n")
-        File.write("api/formula/#{name}.json", FORMULA_JSON_TEMPLATE)
-        File.write("formula/#{name}.html", html_template(name))
+      tap.formula_names.each do |name|
+        formula = Formulary.factory(name)
+        name = formula.name
+        json = JSON.pretty_generate(formula.to_hash_with_variations)
+        html_template_name = html_template(name)
+
+        unless args.dry_run?
+          File.write("_data/formula/#{name.tr("+", "_")}.json", "#{json}\n")
+          File.write("api/formula/#{name}.json", FORMULA_JSON_TEMPLATE)
+          File.write("formula/#{name}.html", html_template_name)
+        end
+      rescue
+        onoe "Error while generating data for formula '#{name}'."
+        raise
       end
-    rescue
-      onoe "Error while generating data for formula '#{name}'."
-      raise
-    end
 
-    canonical_json = JSON.pretty_generate(tap.formula_renames.merge(tap.alias_table))
-    File.write("_data/formula_canonical.json", "#{canonical_json}\n") unless args.dry_run?
+      canonical_json = JSON.pretty_generate(tap.formula_renames.merge(tap.alias_table))
+      File.write("_data/formula_canonical.json", "#{canonical_json}\n") unless args.dry_run?
+    end
   end
 end

@@ -96,7 +96,7 @@ module Homebrew
 
         gnubin = %W[#{findutils.opt_libexec}/gnubin #{findutils.libexec}/gnubin]
         default_names = Tab.for_name("findutils").with? "default-names"
-        return if !default_names && (paths & gnubin).empty?
+        return if !default_names && !paths.intersect?(gnubin)
 
         <<~EOS
           Putting non-prefixed findutils in your path can cause python builds to fail.
@@ -201,18 +201,6 @@ module Homebrew
         <<~EOS
           Xcode alone is not sufficient on #{MacOS.version.pretty_name}.
           #{DevelopmentTools.installation_instructions}
-        EOS
-      end
-
-      def check_ruby_version
-        return if RUBY_VERSION == HOMEBREW_REQUIRED_RUBY_VERSION
-        return if Homebrew::EnvConfig.developer? && OS::Mac.version.prerelease?
-
-        <<~EOS
-          Ruby version #{RUBY_VERSION} is unsupported on macOS #{MacOS.version}. Homebrew
-          is developed and tested on Ruby #{HOMEBREW_REQUIRED_RUBY_VERSION}, and may not work correctly
-          on other Rubies. Patches are accepted as long as they don't cause breakage
-          on supported Rubies.
         EOS
       end
 

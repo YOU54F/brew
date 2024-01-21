@@ -219,6 +219,27 @@ module RuboCop
         end
       end
 
+      # This cop makes sure that formulae depend on `openssl` instead of `quictls`.
+      #
+      # @api private
+      class QuicTLSCheck < FormulaCop
+        extend AutoCorrector
+
+        def audit_formula(_node, _class_node, _parent_class_node, body_node)
+          return if body_node.nil?
+
+          # Enforce use of OpenSSL for TLS dependency in core
+          return if formula_tap != "homebrew-core"
+
+          find_method_with_args(body_node, :depends_on, "quictls") do
+            problem "Formulae in homebrew/core should use 'depends_on \"openssl@3\"' " \
+                    "instead of '#{@offensive_node.source}'." do |corrector|
+              corrector.replace(@offensive_node.source_range, "depends_on \"openssl@3\"")
+            end
+          end
+        end
+      end
+
       # This cop makes sure that formulae do not depend on `pyoxidizer` at build-time
       # or run-time.
       #
@@ -226,24 +247,11 @@ module RuboCop
       class PyoxidizerCheck < FormulaCop
         def audit_formula(_node, _class_node, _parent_class_node, body_node)
           return if body_node.nil?
-
           # Disallow use of PyOxidizer as a dependency in core
           return if formula_tap != "homebrew-core"
+          return unless depends_on?("pyoxidizer")
 
-          find_method_with_args(body_node, :depends_on, "pyoxidizer") do
-            problem "Formulae in homebrew/core should not use '#{@offensive_node.source}'."
-          end
-
-          [
-            :build,
-            [:build],
-            [:build, :test],
-            [:test, :build],
-          ].each do |type|
-            find_method_with_args(body_node, :depends_on, "pyoxidizer" => type) do
-              problem "Formulae in homebrew/core should not use '#{@offensive_node.source}'."
-            end
-          end
+          problem "Formulae in homebrew/core should not use '#{@offensive_node.source}'."
         end
       end
 
@@ -367,9 +375,17 @@ module RuboCop
             string_content(parameters(dep).first).start_with? "python@"
           end
 
-          return if python_formula_node.blank?
+          python_version = if python_formula_node.blank?
+            other_python_nodes = find_every_method_call_by_name(body_node, :depends_on).select do |dep|
+              parameters(dep).first.instance_of?(RuboCop::AST::HashNode) &&
+                string_content(parameters(dep).first.keys.first).start_with?("python@")
+            end
+            return if other_python_nodes.size != 1
 
-          python_version = string_content(parameters(python_formula_node).first).split("@").last
+            string_content(parameters(other_python_nodes.first).first.keys.first).split("@").last
+          else
+            string_content(parameters(python_formula_node).first).split("@").last
+          end
 
           find_strings(body_node).each do |str|
             content = string_content(str)
@@ -430,6 +446,21 @@ module RuboCop
                                            allowed_methods:     NO_ON_SYSTEM_METHOD_NAMES,
                                            allowed_blocks:      NO_ON_SYSTEM_BLOCK_NAMES,
                                            recommend_on_system: true)
+        end
+      end
+
+      # This cop makes sure the `MacOS` module is not used in Linux-facing formula code
+      #
+      # @api private
+      class MacOSOnLinux < FormulaCop
+        include OnSystemConditionalsHelper
+
+        ON_MACOS_BLOCKS = [:macos, *MACOS_VERSION_OPTIONS].map { |os| :"on_#{os}" }.freeze
+
+        def audit_formula(_node, _class_node, _parent_class_node, body_node)
+          audit_macos_references(body_node,
+                                 allowed_methods: OnSystemConditionals::NO_ON_SYSTEM_METHOD_NAMES,
+                                 allowed_blocks:  OnSystemConditionals::NO_ON_SYSTEM_BLOCK_NAMES + ON_MACOS_BLOCKS)
         end
       end
 
@@ -882,6 +913,50 @@ module RuboCop
           problem "Formulae should depend on specific X libraries instead of :x11" if depends_on? :x11
           problem "Formulae should not depend on :osxfuse" if depends_on? :osxfuse
           problem "Formulae should not depend on :tuntap" if depends_on? :tuntap
+        end
+      end
+
+      # This cop makes sure that formulae build with `rust` instead of `rustup-init`.
+      #
+      # @api private
+      class RustCheck < FormulaCop
+        extend AutoCorrector
+
+        def audit_formula(_node, _class_node, _parent_class_node, body_node)
+          return if body_node.nil?
+
+          # Enforce use of `rust` for rust dependency in core
+          return if formula_tap != "homebrew-core"
+
+          find_method_with_args(body_node, :depends_on, "rustup-init") do
+            problem "Formulae in homebrew/core should use 'depends_on \"rust\"' " \
+                    "instead of '#{@offensive_node.source}'." do |corrector|
+              corrector.replace(@offensive_node.source_range, "depends_on \"rust\"")
+            end
+          end
+
+          # TODO: Enforce order of dependency types so we don't need to check for
+          #       depends_on "rustup-init" => [:test, :build]
+          [:build, [:build, :test], [:test, :build]].each do |type|
+            find_method_with_args(body_node, :depends_on, "rustup-init" => type) do
+              problem "Formulae in homebrew/core should use 'depends_on \"rust\" => #{type}' " \
+                      "instead of '#{@offensive_node.source}'." do |corrector|
+                corrector.replace(@offensive_node.source_range, "depends_on \"rust\" => #{type}")
+              end
+            end
+          end
+
+          install_node = find_method_def(body_node, :install)
+          return if install_node.blank?
+
+          find_every_method_call_by_name(install_node, :system).each do |method|
+            param = parameters(method).first
+            next if param.blank?
+            # FIXME: Handle Pathname parameters (e.g. `system bin/"rustup-init"`).
+            next if regex_match_group(param, /rustup-init$/).blank?
+
+            problem "Formula in homebrew/core should not use `rustup-init` at build-time."
+          end
         end
       end
     end

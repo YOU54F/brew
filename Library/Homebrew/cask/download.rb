@@ -24,6 +24,8 @@ module Cask
 
     sig { override.returns(T.nilable(::URL)) }
     def url
+      return if cask.url.nil?
+
       @url ||= ::URL.new(cask.url.to_s, cask.url.specs)
     end
 
@@ -34,7 +36,9 @@ module Cask
 
     sig { override.returns(T.nilable(Version)) }
     def version
-      @version ||= Version.create(cask.version)
+      return if cask.version.nil?
+
+      @version ||= Version.new(cask.version)
     end
 
     sig {
@@ -45,7 +49,7 @@ module Cask
         .returns(Pathname)
     }
     def fetch(quiet: nil, verify_download_integrity: true, timeout: nil)
-      downloader.shutup! if quiet
+      downloader.quiet! if quiet
 
       begin
         super(verify_download_integrity: false, timeout: timeout)

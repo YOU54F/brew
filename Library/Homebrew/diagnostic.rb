@@ -352,7 +352,7 @@ module Homebrew
 
           You should create these directories and change their ownership to your user.
             sudo mkdir -p #{not_exist_dirs.join(" ")}
-            sudo chown -R $(whoami) #{not_exist_dirs.join(" ")}
+            sudo chown -R #{current_user} #{not_exist_dirs.join(" ")}
         EOS
       end
 
@@ -367,7 +367,7 @@ module Homebrew
           #{not_writable_dirs.join("\n")}
 
           You should change the ownership of these directories to your user.
-            sudo chown -R $(whoami) #{not_writable_dirs.join(" ")}
+            sudo chown -R #{current_user} #{not_writable_dirs.join(" ")}
 
           And make sure that your user has write permission.
             chmod u+w #{not_writable_dirs.join(" ")}
@@ -473,7 +473,7 @@ module Homebrew
       def check_git_version
         minimum_version = ENV.fetch("HOMEBREW_MINIMUM_GIT_VERSION")
         return unless Utils::Git.available?
-        return if Version.create(Utils::Git.version) >= Version.create(minimum_version)
+        return if Version.new(Utils::Git.version) >= Version.new(minimum_version)
 
         git = Formula["git"]
         git_upgrade_cmd = git.any_version_installed? ? "upgrade" : "install"
@@ -531,7 +531,7 @@ module Homebrew
       end
 
       def check_casktap_integrity
-        default_cask_tap = Tap.default_cask_tap
+        default_cask_tap = CoreCaskTap.instance
         return unless default_cask_tap.installed?
 
         broken_tap(default_cask_tap) || examine_git_origin(default_cask_tap.git_repo, default_cask_tap.remote)
@@ -642,6 +642,18 @@ module Homebrew
         EOS
       end
 
+      def check_cask_deprecated_disabled
+        deprecated_or_disabled = Cask::Caskroom.casks.select(&:deprecated?)
+        deprecated_or_disabled += Cask::Caskroom.casks.select(&:disabled?)
+        return if deprecated_or_disabled.empty?
+
+        <<~EOS
+          Some installed casks are deprecated or disabled.
+          You should find replacements for the following casks:
+            #{deprecated_or_disabled.sort_by(&:token).uniq * "\n  "}
+        EOS
+      end
+
       sig { returns(T.nilable(String)) }
       def check_git_status
         return unless Utils::Git.available?
@@ -691,7 +703,7 @@ module Homebrew
         return unless coreutils.any_version_installed?
 
         gnubin = %W[#{coreutils.opt_libexec}/gnubin #{coreutils.libexec}/gnubin]
-        return if (paths & gnubin).empty?
+        return unless paths.intersect?(gnubin)
 
         <<~EOS
           Putting non-prefixed coreutils in your path can cause GMP builds to fail.
@@ -822,8 +834,8 @@ module Homebrew
         deleted_formulae = kegs.map do |keg|
           next if Formulary.tap_paths(keg.name).any?
 
-          if !CoreTap.instance.installed? && !EnvConfig.no_install_from_api?
-            # Formulae installed with HOMEBREW_INSTALL_FROM_API should not count as deleted formulae
+          unless EnvConfig.no_install_from_api?
+            # Formulae installed from the API should not count as deleted formulae
             # but may not have a tap listed in their tab
             tap = Tab.for_keg(keg).tap
             next if (tap.blank? || tap.core_tap?) && Homebrew::API::Formula.all_formulae.key?(keg.name)
@@ -861,7 +873,7 @@ module Homebrew
         return if Homebrew::EnvConfig.no_install_from_api?
         return if Homebrew::Settings.read("devcmdrun") == "true"
 
-        cask_tap = Tap.fetch("homebrew", "cask")
+        cask_tap = CoreCaskTap.instance
         return unless cask_tap.installed?
 
         <<~EOS
@@ -916,17 +928,18 @@ module Homebrew
         <<~EOS
           The staging path #{user_tilde(path.to_s)} is not writable by the current user.
           To fix, run:
-            sudo chown -R $(whoami):staff #{user_tilde(path.to_s)}
+            sudo chown -R #{current_user} #{user_tilde(path.to_s)}
         EOS
       end
 
       def check_cask_taps
-        default_cask_tap = Tap.default_cask_tap
-        alt_taps = Tap.select { |t| t.cask_dir.exist? && t != default_cask_tap }
+        default_cask_tap = CoreCaskTap.instance
+        taps = Tap.select { |t| t.cask_dir.exist? && t != default_cask_tap }
+        taps.prepend(default_cask_tap) if EnvConfig.no_install_from_api?
 
         error_tap_paths = []
 
-        add_info "Homebrew Cask Taps:", ([default_cask_tap, *alt_taps].map do |tap|
+        add_info "Homebrew Cask Taps:", (taps.map do |tap|
           if tap.path.blank?
             none_string
           else
@@ -941,8 +954,8 @@ module Homebrew
           end
         end)
 
-        taps = Utils.pluralize("tap", error_tap_paths.count)
-        "Unable to read from cask #{taps}: #{error_tap_paths.to_sentence}" if error_tap_paths.present?
+        taps_string = Utils.pluralize("tap", error_tap_paths.count)
+        "Unable to read from cask #{taps_string}: #{error_tap_paths.to_sentence}" if error_tap_paths.present?
       end
 
       def check_cask_load_path
@@ -1025,6 +1038,10 @@ module Homebrew
 
       def cask_checks
         all.grep(/^check_cask_/)
+      end
+
+      def current_user
+        ENV.fetch("USER", "$(whoami)")
       end
     end
   end

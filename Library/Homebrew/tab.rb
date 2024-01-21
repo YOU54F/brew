@@ -18,7 +18,7 @@ class Tab
                 :built_on
   attr_writer :used_options, :unused_options, :compiler, :runtime_dependencies, :source_modified_time
 
-  # Instantiates a Tab for a new installation of a formula.
+  # Instantiates a {Tab} for a new installation of a formula.
   def self.create(formula, compiler, stdlib)
     build = formula.build
     runtime_deps = formula.runtime_dependencies(undeclared: false)
@@ -226,13 +226,15 @@ class Tab
       {
         "full_name"         => f.full_name,
         "version"           => f.version.to_s,
+        "revision"          => f.revision,
+        "pkg_version"       => f.pkg_version.to_s,
         "declared_directly" => formula.deps.include?(dep),
       }
     end
   end
 
   def initialize(attributes = {})
-    attributes.each { |key, value| instance_variable_set("@#{key}", value) }
+    attributes.each { |key, value| instance_variable_set(:"@#{key}", value) }
   end
 
   def any_args_or_options?
@@ -362,7 +364,7 @@ class Tab
     JSON.pretty_generate(attributes, options)
   end
 
-  # a subset of to_json that we care about for bottles
+  # A subset of to_json that we care about for bottles.
   def to_bottle_hash
     attributes = {
       "homebrew_version"     => homebrew_version,

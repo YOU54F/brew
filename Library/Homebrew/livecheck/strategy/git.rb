@@ -30,7 +30,7 @@ module Homebrew
 
         # The default regex used to naively identify versions from tags when a
         # regex isn't provided.
-        DEFAULT_REGEX = /\D*(.+)/.freeze
+        DEFAULT_REGEX = /\D*(.+)/
 
         # Whether the strategy can be applied to the provided URL.
         #
@@ -66,7 +66,7 @@ module Homebrew
 
           # Isolate tag strings and filter by regex
           tags = stdout.gsub(%r{^.*\trefs/tags/|\^{}$}, "").split("\n").uniq.sort
-          tags.select! { |t| t =~ regex } if regex
+          tags.select! { |t| regex.match?(t) } if regex
           tags_data[:tags] = tags
 
           tags_data

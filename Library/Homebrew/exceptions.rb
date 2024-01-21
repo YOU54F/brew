@@ -87,13 +87,19 @@ class FormulaOrCaskUnavailableError < RuntimeError
     super()
 
     @name = name
+
+    # Store the state of these envs at the time the exception is thrown.
+    # This is so we do the fuzzy search for "did you mean" etc under that same mode,
+    # in case the list of formulae are different.
+    @without_api = Homebrew::EnvConfig.no_install_from_api?
+    @auto_without_api = Homebrew::EnvConfig.automatically_set_no_install_from_api?
   end
 
   sig { returns(String) }
   def did_you_mean
     require "formula"
 
-    similar_formula_names = Formula.fuzzy_search(name)
+    similar_formula_names = Homebrew.with_no_api_env_if_needed(@without_api) { Formula.fuzzy_search(name) }
     return "" if similar_formula_names.blank?
 
     "Did you mean #{similar_formula_names.to_sentence two_words_connector: " or ", last_word_connector: " or "}?"
@@ -101,7 +107,11 @@ class FormulaOrCaskUnavailableError < RuntimeError
 
   sig { returns(String) }
   def to_s
-    "No available formula or cask with the name \"#{name}\". #{did_you_mean}".strip
+    s = "No available formula or cask with the name \"#{name}\". #{did_you_mean}".strip
+    if @auto_without_api && !CoreTap.instance.installed?
+      s += "\nA full git tap clone is required to use this command on core packages."
+    end
+    s
   end
 end
 
@@ -294,9 +304,19 @@ class TapUnavailableError < RuntimeError
   def initialize(name)
     @name = name
 
-    super <<~EOS
-      No available tap #{name}.
-    EOS
+    message = "No available tap #{name}.\n"
+    if [CoreTap.instance.name, CoreCaskTap.instance.name].include?(name)
+      command = "brew tap --force #{name}"
+      message += <<~EOS
+        Run #{Formatter.identifier(command)} to tap #{name}!
+      EOS
+    else
+      command = "brew tap-new #{name}"
+      message += <<~EOS
+        Run #{Formatter.identifier(command)} to create a new #{name} tap!
+      EOS
+    end
+    super message.freeze
   end
 end
 
@@ -324,7 +344,7 @@ end
 class TapCoreRemoteMismatchError < TapRemoteMismatchError
   def message
     <<~EOS
-      Tap #{name} remote does mot match HOMEBREW_CORE_GIT_REMOTE.
+      Tap #{name} remote does not match HOMEBREW_CORE_GIT_REMOTE.
       #{expected_remote} != #{actual_remote}
       Please set HOMEBREW_CORE_GIT_REMOTE="#{actual_remote}" and run `brew update` instead.
     EOS
@@ -459,7 +479,7 @@ class BuildError < RuntimeError
     params(
       formula: T.nilable(Formula),
       cmd:     T.any(String, Pathname),
-      args:    T::Array[T.any(String, Pathname, Integer)],
+      args:    T::Array[T.any(String, Integer, Pathname, Symbol)],
       env:     T::Hash[String, T.untyped],
     ).void
   }
@@ -479,7 +499,7 @@ class BuildError < RuntimeError
 
   sig { returns(T::Array[T.untyped]) }
   def fetch_issues
-    GitHub.issues_for_formula(formula.name, tap: formula.tap, state: "open")
+    GitHub.issues_for_formula(formula.name, tap: formula.tap, state: "open", type: "issue")
   rescue GitHub::API::RateLimitExceededError => e
     opoo e.message
     []

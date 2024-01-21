@@ -1,8 +1,6 @@
 # typed: true
 # frozen_string_literal: true
 
-require "rexml/document"
-
 module Homebrew
   module Livecheck
     module Strategy
@@ -37,7 +35,7 @@ module Homebrew
         PRIORITY = 0
 
         # The `Regexp` used to determine if the strategy applies to the URL.
-        URL_MATCH_REGEX = %r{^https?://}i.freeze
+        URL_MATCH_REGEX = %r{^https?://}i
 
         # Whether the strategy can be applied to the provided URL.
         # {Xml} will technically match any HTTP URL but is only usable with
@@ -72,6 +70,30 @@ module Homebrew
             content = content.gsub(%r{(</?| )#{Regexp.escape(undefined_prefix)}:}, '\1')
             retry
           end
+        end
+
+        # Retrieves the stripped inner text of an `REXML` element. Returns
+        # `nil` if the optional child element doesn't exist or the text is
+        # blank.
+        # @param element [REXML::Element] an `REXML` element to retrieve text
+        #   from, either directly or from a child element
+        # @param child_path [String, nil] the XPath of a child element to
+        #   retrieve text from
+        # @return [String, nil]
+        sig {
+          params(
+            element:    REXML::Element,
+            child_path: T.nilable(String),
+          ).returns(T.nilable(String))
+        }
+        def self.element_text(element, child_path = nil)
+          element = element.get_elements(child_path).first if child_path.present?
+          return if element.nil?
+
+          text = element.text
+          return if text.blank?
+
+          text.strip
         end
 
         # Parses XML text and identifies versions using a `strategy` block.

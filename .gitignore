@@ -26,6 +26,8 @@
 # Ignore Bundler files
 **/.bundle/bin
 **/.bundle/cache
+**/vendor/bundle/ruby/.homebrew_gem_groups
+**/vendor/bundle/ruby/*/.homebrew_vendor_version
 **/vendor/bundle/ruby/*/bundler.lock
 **/vendor/bundle/ruby/*/bin
 **/vendor/bundle/ruby/*/build_info/
@@ -35,10 +37,19 @@
 **/vendor/bundle/ruby/*/plugins
 **/vendor/bundle/ruby/*/specifications
 
+# Ignore Ruby gems for versions other than we explicitly vendor.
+# Keep this in sync with the list in standalone/init.rb.
+**/vendor/bundle/ruby/*/
+!**/vendor/bundle/ruby/3.1.0/
+
+# Ignore Bundler binary files
+**/vendor/bundle/ruby/*/gems/**/*.bundle
+
 # Ignore YARD files
 **/.yardoc
 
 # Unignore vendored gems
+!**/vendor/bundle/ruby/*/gems/*/*LICENSE*
 !**/vendor/bundle/ruby/*/gems/*/lib
 !**/vendor/bundle/ruby/*/gems/addressable-*/data
 !**/vendor/bundle/ruby/*/gems/public_suffix-*/data
@@ -47,60 +58,22 @@
 !**/vendor/bundle/ruby/*/gems/rubocop-rspec-*/config
 !**/vendor/bundle/ruby/*/gems/rubocop-sorbet-*/config
 
-# Ignore activesupport, except for the files we actually need
-**/vendor/bundle/ruby/*/gems/activesupport-*
+# Ignore activesupport, except the ones we need.
+**/vendor/bundle/ruby/*/gems/activesupport-*/lib/**/*
+!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/
+!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/
+!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/*/
+!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/array/access.rb
+!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/enumerable.rb
 !**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/file/atomic.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/hash/except.rb
 !**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/hash/deep_merge.rb
 !**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/hash/deep_transform_values.rb
 !**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/hash/keys.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/hash/slice.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/array/access.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/concerning.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/attribute_accessors_per_thread.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/attr_internal.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/delegation.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/introspection.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/aliasing.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/redefine_method.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/deprecation.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/anonymous.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/remove_method.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/module/attribute_accessors.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/numeric/bytes.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/numeric/conversions.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/numeric/time.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/object/blank.rb
 !**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/object/deep_dup.rb
 !**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/object/duplicable.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/object/try.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/string/filters.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/string/indent.rb
 !**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/string/exclude.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/string/inflections.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/string/multibyte.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/core_ext/enumerable.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/i18n.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/inflector/transliterate.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/inflector/methods.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/inflector/inflections.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/inflector.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/lazy_load_hooks.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/inflections.rb
-!**/vendor/bundle/ruby/*/gems/activesupport-*/lib/active_support/multibyte.rb
 
 # Ignore partially included gems where we don't need all files
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/atomic/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/atomic_reference/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/collection/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/concern/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/executor/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/synchronization/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/thread_safe/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/utility/
-**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/lib/*/*.jar
-**/vendor/bundle/ruby/*/gems/i18n-*/lib/i18n/tests*
-**/vendor/bundle/ruby/*/gems/thread_safe-*/lib/thread_safe/util
 **/vendor/gems/mechanize-*/.*
 **/vendor/gems/mechanize-*/*.md
 **/vendor/gems/mechanize-*/*.rdoc
@@ -108,21 +81,11 @@
 **/vendor/gems/mechanize-*/Gemfile
 **/vendor/gems/mechanize-*/Rakefile
 **/vendor/gems/mechanize-*/examples/
-**/vendor/gems/mechanize-*/lib/*.rb
-**/vendor/gems/mechanize-*/lib/*.rb
-**/vendor/gems/mechanize-*/lib/mechanize/http/agent.rb
-**/vendor/gems/mechanize-*/lib/mechanize/http/*auth*.rb
-**/vendor/gems/mechanize-*/lib/mechanize/c*
-**/vendor/gems/mechanize-*/lib/mechanize/d*
-**/vendor/gems/mechanize-*/lib/mechanize/e*
-**/vendor/gems/mechanize-*/lib/mechanize/f*
-**/vendor/gems/mechanize-*/lib/mechanize/h*.rb
-**/vendor/gems/mechanize-*/lib/mechanize/i*
-**/vendor/gems/mechanize-*/lib/mechanize/p*
-**/vendor/gems/mechanize-*/lib/mechanize/r*
-**/vendor/gems/mechanize-*/lib/mechanize/t*
-**/vendor/gems/mechanize-*/lib/mechanize/u*
-**/vendor/gems/mechanize-*/lib/mechanize/x*
+**/vendor/gems/mechanize-*/lib/**/*
+!**/vendor/gems/mechanize-*/lib/mechanize/
+!**/vendor/gems/mechanize-*/lib/mechanize/http/
+!**/vendor/gems/mechanize-*/lib/mechanize/http/content_disposition_parser.rb
+!**/vendor/gems/mechanize-*/lib/mechanize/version.rb
 **/vendor/gems/mechanize-*/test/
 
 # Ignore dependencies we don't wish to vendor
@@ -133,28 +96,37 @@
 **/vendor/bundle/ruby/*/gems/coderay-*/
 **/vendor/bundle/ruby/*/gems/colorize-*/
 **/vendor/bundle/ruby/*/gems/commander-*/
+**/vendor/bundle/ruby/*/gems/concurrent-ruby-*/
 **/vendor/bundle/ruby/*/gems/diff-lcs-*/
 **/vendor/bundle/ruby/*/gems/docile-*/
 **/vendor/bundle/ruby/*/gems/ecma-re-validator-*/
+**/vendor/bundle/ruby/*/gems/erubi-*/
 **/vendor/bundle/ruby/*/gems/hana-*/
 **/vendor/bundle/ruby/*/gems/highline-*/
 **/vendor/bundle/ruby/*/gems/hpricot-*/
+**/vendor/bundle/ruby/*/gems/i18n-*/
 **/vendor/bundle/ruby/*/gems/jaro_winkler-*/
 **/vendor/bundle/ruby/*/gems/json-*/
 **/vendor/bundle/ruby/*/gems/json_schemer-*/
+**/vendor/bundle/ruby/*/gems/language_server-protocol-*/
 **/vendor/bundle/ruby/*/gems/method_source-*/
 **/vendor/bundle/ruby/*/gems/mini_portile2-*/
 **/vendor/bundle/ruby/*/gems/minitest-*/
 **/vendor/bundle/ruby/*/gems/msgpack-*/
 **/vendor/bundle/ruby/*/gems/mustache-*/
+**/vendor/bundle/ruby/*/gems/netrc-*/
 **/vendor/bundle/ruby/*/gems/ntlm-http-*/
 **/vendor/bundle/ruby/*/gems/parallel-*/
 **/vendor/bundle/ruby/*/gems/parallel_tests-*/
 **/vendor/bundle/ruby/*/gems/parlour-*/
 **/vendor/bundle/ruby/*/gems/parser-*/
 **/vendor/bundle/ruby/*/gems/powerpack-*/
+**/vendor/bundle/ruby/*/gems/prettier_print-*/
+**/vendor/bundle/ruby/*/gems/prism-*/
 **/vendor/bundle/ruby/*/gems/psych-*/
 **/vendor/bundle/ruby/*/gems/pry-*/
+**/vendor/bundle/ruby/*/gems/racc-*/
+**/vendor/bundle/ruby/*/gems/rack-*/
 **/vendor/bundle/ruby/*/gems/rainbow-*/
 **/vendor/bundle/ruby/*/gems/rbi-*/
 **/vendor/bundle/ruby/*/gems/rdiscount-*/
@@ -171,19 +143,24 @@
 **/vendor/bundle/ruby/*/gems/rspec-support-*/
 **/vendor/bundle/ruby/*/gems/rspec-sorbet-*/
 **/vendor/bundle/ruby/*/gems/rspec-wait-*/
-**/vendor/bundle/ruby/*/gems/rubocop-1*/
-**/vendor/bundle/ruby/*/gems/rubocop-ast-*/
+**/vendor/bundle/ruby/*/gems/rubocop-*/
 **/vendor/bundle/ruby/*/gems/ruby-prof-*/
+**/vendor/bundle/ruby/*/gems/ruby-progressbar-*/
 **/vendor/bundle/ruby/*/gems/simplecov-*/
 **/vendor/bundle/ruby/*/gems/simplecov-html-*/
+**/vendor/bundle/ruby/*/gems/simplecov_json_formatter-*/
+**/vendor/bundle/ruby/*/gems/simpleidn-*/
 **/vendor/bundle/ruby/*/gems/sorbet-*/
 !**/vendor/bundle/ruby/*/gems/sorbet-runtime-*/
 **/vendor/bundle/ruby/*/gems/spoom-*/
 **/vendor/bundle/ruby/*/gems/stackprof-*/
 **/vendor/bundle/ruby/*/gems/strscan-*/
+**/vendor/bundle/ruby/*/gems/syntax_tree-*/
 **/vendor/bundle/ruby/*/gems/tapioca-*/
 **/vendor/bundle/ruby/*/gems/thor-*/
 **/vendor/bundle/ruby/*/gems/tzinfo-*/
+**/vendor/bundle/ruby/*/gems/unf-*/
+**/vendor/bundle/ruby/*/gems/unf_ext-*/
 **/vendor/bundle/ruby/*/gems/unicode-display_width-*/
 **/vendor/bundle/ruby/*/gems/unparser-*/
 **/vendor/bundle/ruby/*/gems/uri_template-*/
@@ -210,6 +187,7 @@
 
 # Unignore our packaging files
 !/package
+/package/resources/LICENSE.rtf
 
 # Ignore generated documentation site
 /docs/_site

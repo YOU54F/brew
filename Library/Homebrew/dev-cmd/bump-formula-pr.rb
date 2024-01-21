@@ -85,7 +85,7 @@ module Homebrew
       conflicts "--no-audit", "--online"
       conflicts "--url", "--tag"
 
-      named_args :formula, max: 1
+      named_args :formula, max: 1, without_api: true
     end
   end
 
@@ -117,7 +117,7 @@ module Homebrew
 
     # This will be run by `brew audit` later so run it first to not start
     # spamming during normal output.
-    Homebrew.install_bundler_gems!
+    Homebrew.install_bundler_gems!(groups: ["audit", "style"]) unless args.no_audit?
 
     tap_remote_repo = formula.tap.full_name || formula.tap.remote_repo
     remote = "origin"
@@ -410,7 +410,7 @@ module Homebrew
 
   def fetch_resource_and_forced_version(formula, new_version, url, **specs)
     resource = Resource.new
-    resource.url(url, specs)
+    resource.url(url, **specs)
     resource.owner = Resource.new(formula.name)
     forced_version = new_version && new_version != resource.version.to_s
     resource.version(new_version) if forced_version
@@ -474,7 +474,7 @@ module Homebrew
     name, old_alias_version = versioned_alias.split("@")
     new_alias_regex = (old_alias_version.split(".").length == 1) ? /^\d+/ : /^\d+\.\d+/
     new_alias_version, = *new_formula_version.to_s.match(new_alias_regex)
-    return if Version.create(new_alias_version) <= Version.create(old_alias_version)
+    return if Version.new(new_alias_version) <= Version.new(old_alias_version)
 
     [versioned_alias, "#{name}@#{new_alias_version}"]
   end

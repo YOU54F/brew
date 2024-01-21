@@ -1,6 +1,7 @@
 # typed: true
 # frozen_string_literal: true
 
+require "attrable"
 require "formula_installer"
 require "unpack_strategy"
 require "utils/topological_hash"
@@ -17,7 +18,7 @@ module Cask
   #
   # @api private
   class Installer
-    extend Predicable
+    extend Attrable
 
     def initialize(cask, command: SystemCommand, force: false, adopt: false,
                    skip_cask_deps: false, binaries: true, verbose: false,
@@ -64,12 +65,12 @@ module Cask
       odebug "Cask::Installer#fetch"
 
       load_cask_from_source_api! if @cask.loaded_from_api? && @cask.caskfile_only?
-
       verify_has_sha if require_sha? && !force?
+      check_requirements
 
       download(quiet: quiet, timeout: timeout)
 
-      satisfy_dependencies
+      satisfy_cask_and_formula_dependencies
     end
 
     def stage
@@ -91,13 +92,9 @@ module Cask
       Migrator.migrate_if_needed(@cask)
 
       old_config = @cask.config
-      if @cask.installed? && !force? && !reinstall? && !upgrade?
-        return if quiet?
-
-        raise CaskAlreadyInstalledError, @cask
-      end
       predecessor = @cask if reinstall? && @cask.installed?
 
+      check_deprecate_disable
       check_conflicts
 
       print caveats
@@ -127,6 +124,18 @@ on_request: true)
     rescue
       restore_backup
       raise
+    end
+
+    def check_deprecate_disable
+      deprecate_disable_type = DeprecateDisable.type(@cask)
+      return if deprecate_disable_type.nil?
+
+      case deprecate_disable_type
+      when :deprecated
+        opoo "#{@cask.token} has been #{DeprecateDisable.message(@cask)}"
+      when :disabled
+        raise CaskCannotBeInstalledError.new(@cask, DeprecateDisable.message(@cask))
+      end
     end
 
     def check_conflicts
@@ -258,25 +267,19 @@ on_request: true)
       end
     end
 
-    # TODO: move dependencies to a separate class,
-    #       dependencies should also apply for `brew cask stage`,
-    #       override dependencies with `--force` or perhaps `--force-deps`
-    def satisfy_dependencies
-      return unless @cask.depends_on
-
-      macos_dependencies
-      arch_dependencies
-      cask_and_formula_dependencies
+    def check_requirements
+      check_macos_requirements
+      check_arch_requirements
     end
 
-    def macos_dependencies
+    def check_macos_requirements
       return unless @cask.depends_on.macos
       return if @cask.depends_on.macos.satisfied?
 
       raise CaskError, @cask.depends_on.macos.message(type: :cask)
     end
 
-    def arch_dependencies
+    def check_arch_requirements
       return if @cask.depends_on.arch.nil?
 
       @current_arch ||= { type: Hardware::CPU.type, bits: Hardware::CPU.bits }
@@ -291,7 +294,7 @@ on_request: true)
             "but you are running #{@current_arch}."
     end
 
-    def collect_cask_and_formula_dependencies
+    def cask_and_formula_dependencies
       return @cask_and_formula_dependencies if @cask_and_formula_dependencies
 
       graph = ::Utils::TopologicalHash.graph_package_dependencies(@cask)
@@ -310,20 +313,20 @@ on_request: true)
     end
 
     def missing_cask_and_formula_dependencies
-      collect_cask_and_formula_dependencies.reject do |cask_or_formula|
-        installed = if cask_or_formula.respond_to?(:any_version_installed?)
-          cask_or_formula.any_version_installed?
-        else
-          cask_or_formula.try(:installed?)
+      cask_and_formula_dependencies.reject do |cask_or_formula|
+        case cask_or_formula
+        when Formula
+          cask_or_formula.any_version_installed? && cask_or_formula.optlinked?
+        when Cask
+          cask_or_formula.installed?
         end
-        installed && (cask_or_formula.respond_to?(:optlinked?) ? cask_or_formula.optlinked? : true)
       end
     end
 
-    def cask_and_formula_dependencies
+    def satisfy_cask_and_formula_dependencies
       return if installed_as_dependency?
 
-      formulae_and_casks = collect_cask_and_formula_dependencies
+      formulae_and_casks = cask_and_formula_dependencies
 
       return if formulae_and_casks.empty?
 
@@ -469,6 +472,8 @@ on_request: true)
             skip:      clear,
             force:     force?,
             successor: successor,
+            upgrade:   upgrade?,
+            reinstall: reinstall?,
           )
         end
 

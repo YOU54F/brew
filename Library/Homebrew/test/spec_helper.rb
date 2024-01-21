@@ -33,7 +33,7 @@ require "find"
 require "byebug"
 require "timeout"
 
-$LOAD_PATH.push(File.expand_path("#{ENV.fetch("HOMEBREW_LIBRARY")}/Homebrew/test/support/lib"))
+$LOAD_PATH.unshift(File.expand_path("#{ENV.fetch("HOMEBREW_LIBRARY")}/Homebrew/test/support/lib"))
 
 require_relative "../global"
 
@@ -109,6 +109,8 @@ RSpec.configure do |config|
 
   config.include(FileUtils)
 
+  config.include(Context)
+
   config.include(RuboCop::RSpec::ExpectOffense)
 
   config.include(Test::Helper::Cask)
@@ -167,7 +169,7 @@ RSpec.configure do |config|
 
   config.before(:each, :needs_homebrew_curl) do
     ENV["HOMEBREW_CURL"] = HOMEBREW_BREWED_CURL_PATH
-    skip "A `curl` with TLS 1.3 support is required." unless curl_supports_tls13?
+    skip "A `curl` with TLS 1.3 support is required." unless Utils::Curl.curl_supports_tls13?
   rescue FormulaUnavailableError
     skip "No `curl` formula is available."
   end
@@ -196,6 +198,7 @@ RSpec.configure do |config|
     Tab.clear_cache
     Dependency.clear_cache
     Requirement.clear_cache
+    Readall.clear_cache if defined?(Readall)
     FormulaInstaller.clear_attempted
     FormulaInstaller.clear_installed
     FormulaInstaller.clear_fetched
@@ -214,7 +217,7 @@ RSpec.configure do |config|
     @__stdin = $stdin.clone
 
     begin
-      if (example.metadata.keys & [:focus, :byebug]).empty? && !ENV.key?("HOMEBREW_VERBOSE_TESTS")
+      if !example.metadata.keys.intersect?([:focus, :byebug]) && !ENV.key?("HOMEBREW_VERBOSE_TESTS")
         $stdout.reopen(File::NULL)
         $stderr.reopen(File::NULL)
       else
@@ -235,6 +238,7 @@ RSpec.configure do |config|
       example.example.set_exception(e)
     ensure
       ENV.replace(@__env)
+      Context.current = Context::ContextStruct.new
 
       $stdout.reopen(@__stdout)
       $stderr.reopen(@__stderr)
@@ -251,6 +255,7 @@ RSpec.configure do |config|
       Tab.clear_cache
       Dependency.clear_cache
       Requirement.clear_cache
+      Readall.clear_cache if defined?(Readall)
 
       FileUtils.rm_rf [
         *TEST_DIRECTORIES,

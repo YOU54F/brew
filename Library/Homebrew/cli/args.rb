@@ -32,7 +32,7 @@ module Homebrew
         self[:remaining] = remaining_args.freeze
       end
 
-      def freeze_named_args!(named_args, cask_options:)
+      def freeze_named_args!(named_args, cask_options:, without_api:)
         options = {}
         options[:force_bottle] = true if self[:force_bottle?]
         options[:override_spec] = :head if self[:HEAD?]
@@ -41,6 +41,7 @@ module Homebrew
           *named_args.freeze,
           parent:       self,
           cask_options: cask_options,
+          without_api:  without_api,
           **options,
         )
       end
@@ -96,8 +97,11 @@ module Homebrew
       end
 
       def only_formula_or_cask
-        return :formula if formula? && !cask?
-        return :cask if cask? && !formula?
+        if formula? && !cask?
+          :formula
+        elsif cask? && !formula?
+          :cask
+        end
       end
 
       sig { returns(T::Array[[Symbol, Symbol]]) }
@@ -110,10 +114,7 @@ module Homebrew
         when :all
           skip_invalid_combinations = true
 
-          [
-            *MacOSVersions::SYMBOLS.keys,
-            :linux,
-          ]
+          OnSystem::ALL_OS_OPTIONS
         else
           [os_sym]
         end
@@ -151,7 +152,7 @@ module Homebrew
         @cli_args = []
         @processed_options.each do |short, long|
           option = long || short
-          switch = "#{option_to_name(option)}?".to_sym
+          switch = :"#{option_to_name(option)}?"
           flag = option_to_name(option).to_sym
           if @table[switch] == true || @table[flag] == true
             @cli_args << option

@@ -20,12 +20,13 @@ module GitHub
   API_URL = "https://api.github.com"
   API_MAX_PAGES = 50
   API_MAX_ITEMS = 5000
+  PAGINATE_RETRY_COUNT = 3
 
   CREATE_GIST_SCOPES = ["gist"].freeze
   CREATE_ISSUE_FORK_OR_PR_SCOPES = ["repo"].freeze
   CREATE_WORKFLOW_SCOPES = ["workflow"].freeze
   ALL_SCOPES = (CREATE_GIST_SCOPES + CREATE_ISSUE_FORK_OR_PR_SCOPES + CREATE_WORKFLOW_SCOPES).freeze
-  GITHUB_PERSONAL_ACCESS_TOKEN_REGEX = /^(?:[a-f0-9]{40}|gh[po]_\w{36,251})$/.freeze
+  GITHUB_PERSONAL_ACCESS_TOKEN_REGEX = /^(?:[a-f0-9]{40}|gh[po]_\w{36,251})$/
 
   # Helper functions to access the GitHub API.
   #
@@ -60,7 +61,11 @@ module GitHub
       end
     end
 
-    NO_CREDENTIALS_MESSAGE = <<~MESSAGE
+    GITHUB_IP_ALLOWLIST_ERROR = Regexp.new("Although you appear to have the correct authorization credentials, " \
+                                           "the `(.+)` organization has an IP allow list enabled, " \
+                                           "and your IP address is not permitted to access this resource").freeze
+
+    NO_CREDENTIALS_MESSAGE = <<~MESSAGE.freeze
       No GitHub credentials found in macOS Keychain, GitHub CLI or the environment.
       #{GitHub.pat_blurb}
     MESSAGE
@@ -159,20 +164,18 @@ module GitHub
       github_password
     end
 
-    # odeprecated: Not really deprecated; change the order to prefer `github_cli_token` over
-    # `keychain_username_password` during the next major/minor release.
     def self.credentials
-      @credentials ||= Homebrew::EnvConfig.github_api_token || keychain_username_password || github_cli_token
+      @credentials ||= Homebrew::EnvConfig.github_api_token || github_cli_token || keychain_username_password
     end
 
     sig { returns(Symbol) }
     def self.credentials_type
       if Homebrew::EnvConfig.github_api_token.present?
         :env_token
-      elsif keychain_username_password.present?
-        :keychain_username_password
       elsif github_cli_token.present?
         :github_cli_token
+      elsif keychain_username_password.present?
+        :keychain_username_password
       else
         :none
       end
@@ -248,7 +251,7 @@ module GitHub
 
         args += ["--dump-header", T.must(headers_tmpfile.path)]
 
-        output, errors, status = curl_output("--location", url.to_s, *args, secrets: [token])
+        output, errors, status = Utils::Curl.curl_output("--location", url.to_s, *args, secrets: [token])
         output, _, http_code = output.rpartition("\n")
         output, _, http_code = output.rpartition("\n") if http_code == "000"
         headers = headers_tmpfile.read
@@ -279,7 +282,17 @@ module GitHub
 
     def self.paginate_rest(url, additional_query_params: nil, per_page: 100)
       (1..API_MAX_PAGES).each do |page|
-        result = API.open_rest("#{url}?per_page=#{per_page}&page=#{page}&#{additional_query_params}")
+        retry_count = 1
+        result = begin
+          API.open_rest("#{url}?per_page=#{per_page}&page=#{page}&#{additional_query_params}")
+        rescue Error
+          if retry_count < PAGINATE_RETRY_COUNT
+            retry_count += 1
+            retry
+          end
+
+          raise
+        end
         break if result.blank?
 
         yield(result, page)

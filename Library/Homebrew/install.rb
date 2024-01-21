@@ -87,7 +87,7 @@ module Homebrew
           # keg-only install is only possible when no other version is
           # linked to opt, because installing without any warnings can break
           # dependencies. Therefore before performing other checks we need to be
-          # sure --force flag is passed.
+          # sure the --force switch is passed.
           if formula.outdated?
             if !Homebrew::EnvConfig.no_install_upgrade? && !formula.pinned?
               name = formula.name
@@ -113,7 +113,7 @@ module Homebrew
             EOS
           end
         elsif (head && new_head_installed) || prefix_installed
-          # After we're sure that --force flag is passed for linked to opt
+          # After we're sure the --force switch was passed for linking to opt
           # keg-only we need to be sure that the version we're attempting to
           # install is not already installed.
 
@@ -305,12 +305,12 @@ module Homebrew
         end
       end
 
-      def print_dry_run_dependencies(formula, dependencies, &block)
+      def print_dry_run_dependencies(formula, dependencies)
         return if dependencies.empty?
 
         ohai "Would install #{Utils.pluralize("dependenc", dependencies.count, plural: "ies", singular: "y",
                                             include_count: true)} for #{formula.name}:"
-        formula_names = dependencies.map(&:first).map(&:to_formula).map(&block)
+        formula_names = dependencies.map { |(dep, _options)| yield dep.to_formula }
         puts formula_names.join(" ")
       end
 

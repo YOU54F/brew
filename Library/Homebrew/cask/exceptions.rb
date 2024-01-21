@@ -54,6 +54,23 @@ module Cask
     end
   end
 
+  # Error when a cask cannot be installed.
+  #
+  # @api private
+  class CaskCannotBeInstalledError < AbstractCaskErrorWithToken
+    attr_reader :message
+
+    def initialize(token, message)
+      super(token)
+      @message = message
+    end
+
+    sig { returns(String) }
+    def to_s
+      "Cask '#{token}' has been #{message}"
+    end
+  end
+
   # Error when a cask conflicts with another cask.
   #
   # @api private
@@ -129,21 +146,6 @@ module Cask
     sig { returns(String) }
     def to_s
       %Q(Cask '#{token}' already exists. Run #{Formatter.identifier("brew edit --cask #{token}")} to edit it.)
-    end
-  end
-
-  # Error when a cask is already installed.
-  #
-  # @api private
-  class CaskAlreadyInstalledError < AbstractCaskErrorWithToken
-    sig { returns(String) }
-    def to_s
-      <<~EOS
-        Cask '#{token}' is already installed.
-
-        To re-install #{token}, run:
-          #{Formatter.identifier("brew reinstall --cask #{token}")}
-      EOS
     end
   end
 

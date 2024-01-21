@@ -85,10 +85,6 @@ module Homebrew
                 key: ${{ runner.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
                 restore-keys: ${{ runner.os }}-rubygems-
 
-            - name: Install Homebrew Bundler RubyGems
-              if: steps.cache.outputs.cache-hit != 'true'
-              run: brew install-bundler-gems
-
             - run: brew test-bot --only-cleanup-before
 
             - run: brew test-bot --only-setup
@@ -100,7 +96,7 @@ module Homebrew
 
             - name: Upload bottles as artifact
               if: always() && github.event_name == 'pull_request'
-              uses: actions/upload-artifact@main
+              uses: actions/upload-artifact@v3
               with:
                 name: bottles
                 path: '*.bottle.*'
@@ -116,6 +112,10 @@ module Homebrew
         pr-pull:
           if: contains(github.event.pull_request.labels.*.name, '#{label}')
           runs-on: ubuntu-22.04
+          permissions:
+            contents: write
+            packages: #{args.github_packages? ? "write" : "none"}
+            pull-requests: write
           steps:
             - name: Set up Homebrew
               uses: Homebrew/actions/setup-homebrew@master

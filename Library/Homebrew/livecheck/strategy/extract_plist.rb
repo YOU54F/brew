@@ -24,7 +24,7 @@ module Homebrew
         PRIORITY = 0
 
         # The `Regexp` used to determine if the strategy applies to the URL.
-        URL_MATCH_REGEX = %r{^https?://}i.freeze
+        URL_MATCH_REGEX = %r{^https?://}i
 
         # Whether the strategy can be applied to the provided URL.
         #
@@ -104,7 +104,7 @@ module Homebrew
 
           unversioned_cask_checker = if url.present? && url != cask.url.to_s
             # Create a copy of the `cask` that uses the `livecheck` block URL
-            cask_copy = Cask::CaskLoader.load(cask.full_name)
+            cask_copy = Cask::CaskLoader.load(cask.sourcefile_path)
             cask_copy.allow_reassignment = true
             cask_copy.url { url }
             UnversionedCaskChecker.new(cask_copy)

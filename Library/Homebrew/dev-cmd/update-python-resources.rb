@@ -30,7 +30,7 @@ module Homebrew
       comma_array "--exclude-packages",
                   description: "Exclude these packages when finding resources."
 
-      named_args :formula, min: 1
+      named_args :formula, min: 1, without_api: true
     end
   end
 
@@ -45,6 +45,7 @@ module Homebrew
                                     exclude_packages:         args.exclude_packages,
                                     print_only:               args.print_only?,
                                     silent:                   args.silent?,
+                                    verbose:                  args.verbose?,
                                     ignore_non_pypi_packages: args.ignore_non_pypi_packages?
     end
   end

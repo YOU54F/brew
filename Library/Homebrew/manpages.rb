@@ -28,7 +28,7 @@ module Homebrew
     )
 
     def self.regenerate_man_pages(quiet:)
-      Homebrew.install_bundler_gems!
+      Homebrew.install_bundler_gems!(groups: ["man"])
 
       markup = build_man_page(quiet: quiet)
       convert_man_page(markup, TARGET_DOC_PATH/"Manpage.md")
@@ -145,8 +145,8 @@ module Homebrew
 
         if long.present?
           next if Homebrew::CLI::Parser.global_options.include?([short, long, desc])
-          next if Homebrew::CLI::Parser.global_cask_options.any? do |_, option, description:, **|
-                    [long, "#{long}="].include?(option) && description == desc
+          next if Homebrew::CLI::Parser.global_cask_options.any? do |_, option, kwargs|
+                    [long, "#{long}="].include?(option) && kwargs.fetch(:description) == desc
                   end
         end
 
@@ -183,9 +183,9 @@ module Homebrew
     sig { returns(String) }
     def self.global_cask_options_manpage
       lines = ["These options are applicable to the `install`, `reinstall`, and `upgrade` " \
-               "subcommands with the `--cask` flag.\n"]
-      lines += Homebrew::CLI::Parser.global_cask_options.map do |_, long, description:, **|
-        generate_option_doc(nil, long.chomp("="), description)
+               "subcommands with the `--cask` switch.\n"]
+      lines += Homebrew::CLI::Parser.global_cask_options.map do |_, long, kwargs|
+        generate_option_doc(nil, long.chomp("="), kwargs.fetch(:description))
       end
       lines.join("\n")
     end

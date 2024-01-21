@@ -33,7 +33,7 @@ module Cask
     def self.check_quarantine_support
       odebug "Checking quarantine support"
 
-      if !system_command(xattr, args: ["-h"], print_stderr: false).success?
+      if xattr.nil? || !system_command(xattr, args: ["-h"], print_stderr: false).success?
         odebug "There's no working version of `xattr` on this system."
         :xattr_broken
       elsif swift.nil?
@@ -174,11 +174,11 @@ module Cask
       raise CaskQuarantinePropagationError.new(to, quarantiner.stderr)
     end
 
-    sig { params(from: Pathname, to: Pathname).void }
-    def self.copy_xattrs(from, to)
+    sig { params(from: Pathname, to: Pathname, command: T.class_of(SystemCommand)).void }
+    def self.copy_xattrs(from, to, command:)
       odebug "Copying xattrs from #{from} to #{to}"
 
-      system_command!(
+      command.run!(
         swift,
         args: [
           *swift_target_args,
@@ -217,7 +217,7 @@ module Cask
           File.write(test_file, "")
           test_file.delete
           return true
-        rescue Errno::EACCES
+        rescue Errno::EACCES, Errno::EPERM
           # Using error handler below
         end
       else
@@ -248,7 +248,7 @@ module Cask
       opoo <<~EOF
         Your terminal does not have App Management permissions, so Homebrew will delete and reinstall the app.
         This may result in some configurations (like notification settings or location in the Dock/Launchpad) being lost.
-        To fix this, go to Settings > Security and Privacy > App Management and turn on the switch for your terminal.
+        To fix this, go to System Settings > Privacy & Security > App Management and add or enable your terminal.
       EOF
 
       false

@@ -74,12 +74,20 @@ class AbstractDownloadStrategy
 
   # Disable any output during downloading.
   #
-  # TODO: Deprecate once we have an explicitly documented alternative.
-  #
   # @api public
   sig { void }
-  def shutup!
+  def quiet!
     @quiet = true
+  end
+
+  # Disable any output during downloading.
+  #
+  # @deprecated
+  # @api private
+  sig { void }
+  def shutup!
+    odeprecated "AbstractDownloadStrategy#shutup!", "AbstractDownloadStrategy#quiet!"
+    quiet!
   end
 
   def quiet?
@@ -189,7 +197,7 @@ class VCSDownloadStrategy < AbstractDownloadStrategy
     super
     @ref_type, @ref = extract_ref(meta)
     @revision = meta[:revision]
-    @cached_location = @cache/"#{name}--#{cache_tag}"
+    @cached_location = @cache/Utils.safe_filename("#{name}--#{cache_tag}")
   end
 
   # Download and cache the repository at {#cached_location}.
@@ -288,7 +296,7 @@ class AbstractFileDownloadStrategy < AbstractDownloadStrategy
     return @symlink_location if defined?(@symlink_location)
 
     ext = Pathname(parse_basename(url)).extname
-    @symlink_location = @cache/"#{name}--#{version}#{ext}"
+    @symlink_location = @cache/Utils.safe_filename("#{name}--#{version}#{ext}")
   end
 
   # Path for storing the completed download.
@@ -304,7 +312,7 @@ class AbstractFileDownloadStrategy < AbstractDownloadStrategy
     @cached_location = if downloads.count == 1
       downloads.first
     else
-      HOMEBREW_CACHE/"downloads/#{url_sha256}--#{resolved_basename}"
+      HOMEBREW_CACHE/"downloads/#{url_sha256}--#{Utils.safe_filename(resolved_basename)}"
     end
   end
 
@@ -383,7 +391,6 @@ class CurlDownloadStrategy < AbstractFileDownloadStrategy
   attr_reader :mirrors
 
   def initialize(url, name, version, **meta)
-    super
     @try_partial = true
     @mirrors = meta.fetch(:mirrors, [])
 
@@ -409,6 +416,10 @@ class CurlDownloadStrategy < AbstractFileDownloadStrategy
 
     begin
       url = urls.shift
+
+      if (domain = Homebrew::EnvConfig.artifact_domain)
+        url = url.sub(%r{^https?://#{GitHubPackages::URL_DOMAIN}/}o, "#{domain.chomp("/")}/")
+      end
 
       ohai "Downloading #{url}"
 
@@ -477,11 +488,12 @@ class CurlDownloadStrategy < AbstractFileDownloadStrategy
     @resolved_info_cache ||= {}
     return @resolved_info_cache[url] if @resolved_info_cache.include?(url)
 
-    if (domain = Homebrew::EnvConfig.artifact_domain)
-      url = url.sub(%r{^https?://#{GitHubPackages::URL_DOMAIN}/}o, "#{domain.chomp("/")}/")
+    begin
+      parsed_output = curl_headers(url.to_s, wanted_headers: ["content-disposition"], timeout: timeout)
+    rescue ErrorDuringExecution
+      return [url, parse_basename(url), nil, nil, false]
     end
 
-    parsed_output = curl_headers(url.to_s, wanted_headers: ["content-disposition"], timeout: timeout)
     parsed_headers = parsed_output.fetch(:responses).map { |r| r.fetch(:headers) }
 
     final_url = curl_response_follow_redirections(parsed_output.fetch(:responses), url)
@@ -565,9 +577,7 @@ class CurlDownloadStrategy < AbstractFileDownloadStrategy
 
     if meta[:insecure]
       unless @insecure_warning_shown
-        opoo "Using --insecure with curl to download `ca-certificates` " \
-             "because we need it installed to download securely from now on. " \
-             "Checksums will still be verified."
+        opoo DevelopmentTools.insecure_download_warning("an updated certificates file")
         @insecure_warning_shown = true
       end
       args += ["--insecure"]
@@ -628,8 +638,10 @@ class CurlGitHubPackagesDownloadStrategy < CurlDownloadStrategy
 
   private
 
-  def resolved_basename
-    @resolved_basename.presence || super
+  def resolve_url_basename_time_file_size(url, timeout: nil)
+    return super if @resolved_basename.blank?
+
+    [url, @resolved_basename, nil, nil, false]
   end
 end
 
@@ -736,7 +748,7 @@ class SubversionDownloadStrategy < VCSDownloadStrategy
   # @api public
   sig { returns(Time) }
   def source_modified_time
-    time = if Version.create(T.must(Utils::Svn.version)) >= Version.create("1.9")
+    time = if Version.new(T.must(Utils::Svn.version)) >= Version.new("1.9")
       out, = silent_command("svn", args: ["info", "--show-item", "last-changed-date"], chdir: cached_location)
       out
     else
@@ -834,6 +846,12 @@ class GitDownloadStrategy < VCSDownloadStrategy
     # Needs to be before the call to `super`, as the VCSDownloadStrategy's
     # constructor calls `cache_tag` and sets the cache path.
     @only_path = meta[:only_path]
+
+    if @only_path.present?
+      # "Cone" mode of sparse checkout requires patterns to be directories
+      @only_path = "/#{@only_path}" unless @only_path.start_with?("/")
+      @only_path = "#{@only_path}/" unless @only_path.end_with?("/")
+    end
 
     super
     @ref_type ||= :branch
@@ -1075,9 +1093,12 @@ class GitDownloadStrategy < VCSDownloadStrategy
     command! "git",
              args:  ["config", "core.sparseCheckout", "true"],
              chdir: cached_location
+    command! "git",
+             args:  ["config", "core.sparseCheckoutCone", "true"],
+             chdir: cached_location
 
     (git_dir/"info").mkpath
-    (git_dir/"info"/"sparse-checkout").atomic_write("#{@only_path}\n")
+    (git_dir/"info/sparse-checkout").atomic_write("#{@only_path}\n")
   end
 end
 
@@ -1261,21 +1282,46 @@ class MercurialDownloadStrategy < VCSDownloadStrategy
 
   sig { params(timeout: T.nilable(Time)).void }
   def clone_repo(timeout: nil)
-    command! "hg", args: ["clone", @url, cached_location], timeout: timeout&.remaining
+    clone_args = %w[clone]
+
+    case @ref_type
+    when :branch
+      clone_args << "--branch" << @ref
+    when :revision, :tag
+      clone_args << "--rev" << @ref
+    end
+
+    clone_args << @url << cached_location.to_s
+    command! "hg", args: clone_args, timeout: timeout&.remaining
   end
 
   sig { params(timeout: T.nilable(Time)).void }
   def update(timeout: nil)
-    command! "hg", args: ["--cwd", cached_location, "pull", "--update"], timeout: timeout&.remaining
+    pull_args = %w[pull]
 
-    update_args = if @ref_type && @ref
-      ohai "Checking out #{@ref_type} #{@ref}"
-      [@ref]
-    else
-      ["--clean"]
+    case @ref_type
+    when :branch
+      pull_args << "--branch" << @ref
+    when :revision, :tag
+      pull_args << "--rev" << @ref
     end
 
-    command! "hg", args: ["--cwd", cached_location, "update", *update_args], timeout: timeout&.remaining
+    command! "hg", args: ["--cwd", cached_location, *pull_args], timeout: timeout&.remaining
+
+    update_args = %w[update --clean]
+    update_args << if @ref_type && @ref
+      ohai "Checking out #{@ref_type} #{@ref}"
+      @ref
+    else
+      "default"
+    end
+
+    command! "hg", args: ["--cwd", cached_location, *update_args], timeout: timeout&.remaining
+  end
+
+  def current_revision
+    out, = silent_command("hg", args: ["--cwd", cached_location, "identify", "--id"])
+    out.strip
   end
 end
 

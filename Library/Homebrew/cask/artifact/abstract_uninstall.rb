@@ -28,12 +28,12 @@ module Cask
       ].freeze
 
       def self.from_args(cask, **directives)
-        new(cask, directives)
+        new(cask, **directives)
       end
 
       attr_reader :directives
 
-      def initialize(cask, directives)
+      def initialize(cask, **directives)
         directives.assert_valid_keys(*ORDERED_DIRECTIVES)
 
         super(cask, **directives)
@@ -72,7 +72,7 @@ module Cask
 
         args = directives[directive_sym]
 
-        send("uninstall_#{directive_sym}", *(args.is_a?(Hash) ? [args] : args), **options)
+        send(:"uninstall_#{directive_sym}", *(args.is_a?(Hash) ? [args] : args), **options)
       end
 
       def stanza
@@ -279,8 +279,13 @@ module Cask
           # misapplied "kill" by root could bring down the system. The fact that we
           # learned the pid from AppleScript is already some degree of protection,
           # though indirect.
+          # TODO: check the user that owns the PID and don't try to kill those from other users.
           odebug "Unix ids are #{pids.inspect} for processes with bundle identifier #{bundle_id}"
-          Process.kill(signal, *pids)
+          begin
+            Process.kill(signal, *pids)
+          rescue Errno::EPERM => e
+            opoo "Failed to kill #{bundle_id} PIDs #{pids.join(", ")} with signal #{signal}: #{e}"
+          end
           sleep 3
         end
       end
@@ -379,7 +384,7 @@ module Cask
       end
 
       def uninstall_pkgutil(*pkgs, command: nil, **_)
-        ohai "Uninstalling packages; your password may be necessary:"
+        ohai "Uninstalling packages with sudo; the password may be necessary:"
         pkgs.each do |regex|
           ::Cask::Pkg.all_matching(regex, command).each do |pkg|
             puts pkg.package_id

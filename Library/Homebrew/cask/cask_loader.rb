@@ -4,6 +4,7 @@
 require "cask/cache"
 require "cask/cask"
 require "uri"
+require "utils/curl"
 
 module Cask
   # Loads a cask from various sources.
@@ -160,7 +161,7 @@ module Cask
 
         begin
           ohai "Downloading #{url}"
-          curl_download url, to: path
+          ::Utils::Curl.curl_download url, to: path
         rescue ErrorDuringExecution
           raise CaskUnavailableError.new(token, "Failed to download #{Formatter.url(url)}.")
         end
@@ -244,7 +245,7 @@ module Cask
 
       def initialize(token, from_json: nil)
         @token = token.sub(%r{^homebrew/(?:homebrew-)?cask/}i, "")
-        @path = CaskLoader.default_path(token)
+        @path = CaskLoader.default_path(@token)
         @from_json = from_json
       end
 
@@ -277,13 +278,23 @@ module Cask
             sha256 json_cask[:sha256]
           end
 
-          url json_cask[:url], **json_cask.fetch(:url_specs, {})
+          url json_cask[:url], **json_cask.fetch(:url_specs, {}) if json_cask[:url].present?
           appcast json_cask[:appcast] if json_cask[:appcast].present?
-          json_cask[:name].each do |cask_name|
+          json_cask[:name]&.each do |cask_name|
             name cask_name
           end
           desc json_cask[:desc]
           homepage json_cask[:homepage]
+
+          if (deprecation_date = json_cask[:deprecation_date].presence)
+            reason = DeprecateDisable.to_reason_string_or_symbol json_cask[:deprecation_reason], type: :cask
+            deprecate! date: deprecation_date, because: reason
+          end
+
+          if (disable_date = json_cask[:disable_date].presence)
+            reason = DeprecateDisable.to_reason_string_or_symbol json_cask[:disable_reason], type: :cask
+            disable! date: disable_date, because: reason
+          end
 
           auto_updates json_cask[:auto_updates] unless json_cask[:auto_updates].nil?
           conflicts_with(**json_cask[:conflicts_with]) if json_cask[:conflicts_with].present?
@@ -332,7 +343,13 @@ module Cask
               # for artifacts with blocks that can't be loaded from the API
               send(key) {} # empty on purpose
             else
-              send(key, *artifact[key])
+              args = artifact[key]
+              kwargs = if args.last.is_a?(Hash)
+                args.pop
+              else
+                {}
+              end
+              send(key, *args, **kwargs)
             end
           end
 
@@ -349,6 +366,7 @@ module Cask
         string.to_s
               .gsub(HOMEBREW_HOME_PLACEHOLDER, Dir.home)
               .gsub(HOMEBREW_PREFIX_PLACEHOLDER, HOMEBREW_PREFIX)
+              .gsub(HOMEBREW_CELLAR_PLACEHOLDER, HOMEBREW_CELLAR)
               .gsub(HOMEBREW_CASK_APPDIR_PLACEHOLDER, appdir)
       end
 
@@ -438,7 +456,7 @@ module Cask
     end
 
     def self.default_path(token)
-      Tap.default_cask_tap.cask_dir/"#{token.to_s.downcase}.rb"
+      find_cask_in_tap(token.to_s.downcase, CoreCaskTap.instance)
     end
 
     def self.tap_paths(token, warn: true)
@@ -454,7 +472,8 @@ module Cask
     def self.find_cask_in_tap(token, tap)
       filename = "#{token}.rb"
 
-      Tap.cask_files_by_name(tap).fetch(filename, tap.cask_dir/filename)
+      Tap.cask_files_by_name(tap)
+         .fetch(token, tap.cask_dir/filename)
     end
   end
 end

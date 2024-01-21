@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 require "fetch"
@@ -17,10 +17,10 @@ module Homebrew
         If <formula> is provided, display the file or directory used to cache <formula>.
       EOS
       flag   "--os=",
-             description: "Show cache file for the given operating system." \
+             description: "Show cache file for the given operating system. " \
                           "(Pass `all` to show cache files for all operating systems.)"
       flag   "--arch=",
-             description: "Show cache file for the given CPU architecture." \
+             description: "Show cache file for the given CPU architecture. " \
                           "(Pass `all` to show cache files for all architectures.)"
       switch "-s", "--build-from-source",
              description: "Show the cache file used when building from source."
@@ -59,12 +59,11 @@ module Homebrew
     formulae_or_casks.each do |formula_or_cask|
       case formula_or_cask
       when Formula
-        formula = T.cast(formula_or_cask, Formula)
+        formula = formula_or_cask
         ref = formula.loaded_from_api? ? formula.full_name : formula.path
 
         os_arch_combinations.each do |os, arch|
           SimulateSystem.with os: os, arch: arch do
-            Formulary.clear_cache
             formula = Formulary.factory(ref)
             print_formula_cache(formula, os: os, arch: arch, args: args)
           end
@@ -96,7 +95,6 @@ module Homebrew
       arch:                       args.arch&.to_sym,
     )
       bottle_tag = if (bottle_tag = args.bottle_tag&.to_sym)
-        # TODO: odeprecate "--bottle-tag"
         Utils::Bottles::Tag.from_symbol(bottle_tag)
       else
         Utils::Bottles::Tag.new(system: os, arch: arch)
@@ -111,7 +109,7 @@ module Homebrew
 
       puts bottle.cached_download
     elsif args.HEAD?
-      puts formula.head.cached_download
+      puts T.must(formula.head).cached_download
     else
       puts formula.cached_download
     end

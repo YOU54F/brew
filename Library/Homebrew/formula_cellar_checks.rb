@@ -18,6 +18,8 @@ module FormulaCellarChecks
   def problem_if_output(output); end
 
   def check_env_path(bin)
+    return if Homebrew::EnvConfig.no_env_hints?
+
     # warn the user if stuff was installed outside of their PATH
     return unless bin.directory?
     return if bin.children.empty?
@@ -320,6 +322,14 @@ module FormulaCellarChecks
     keg = Keg.new(formula.prefix)
     return if keg.binary_executable_or_library_files.any? do |file|
       cpuid_instruction?(file, objdump)
+    end
+
+    hardlinks = Set.new
+    return if formula.lib.directory? && formula.lib.find.any? do |pn|
+      next false if pn.symlink? || pn.directory? || pn.extname != ".a"
+      next false unless hardlinks.add? [pn.stat.dev, pn.stat.ino]
+
+      cpuid_instruction?(pn, objdump)
     end
 
     "No `cpuid` instruction detected. #{formula} should not use `ENV.runtime_cpu_detection`."

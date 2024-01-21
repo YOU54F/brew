@@ -21,7 +21,7 @@ module Kernel
       Context.current.verbose?
     end
 
-    title = Tty.truncate(title) if $stdout.tty? && !verbose
+    title = Tty.truncate(title.to_s) if $stdout.tty? && !verbose
     Formatter.headline(title, color: :blue)
   end
 
@@ -39,8 +39,8 @@ module Kernel
 
     return if !debug && !always_display
 
-    puts Formatter.headline(title, color: :magenta)
-    puts sput unless sput.empty?
+    $stderr.puts Formatter.headline(title, color: :magenta)
+    $stderr.puts sput unless sput.empty?
   end
 
   def oh1_title(title, truncate: :auto)
@@ -50,7 +50,7 @@ module Kernel
       Context.current.verbose?
     end
 
-    title = Tty.truncate(title) if $stdout.tty? && !verbose && truncate == :auto
+    title = Tty.truncate(title.to_s) if $stdout.tty? && !verbose && truncate == :auto
     Formatter.headline(title, color: :green)
   end
 
@@ -155,9 +155,10 @@ module Kernel
     end
   end
 
-  def odisabled(method, replacement = nil, options = {})
+  def odisabled(method, replacement = nil, **options)
     options = { disable: true, caller: caller }.merge(options)
-    odeprecated(method, replacement, options)
+    # This odeprecated should stick around indefinitely.
+    odeprecated(method, replacement, **options)
   end
 
   def pretty_installed(formula)
@@ -291,7 +292,7 @@ module Kernel
     unless silent
       opoo <<~EOS
         Using #{editor} because no editor was set in the environment.
-        This may change in the future, so we recommend setting EDITOR,
+        This may change in the future, so we recommend setting EDITOR
         or HOMEBREW_EDITOR to your preferred text editor.
       EOS
     end
@@ -314,12 +315,6 @@ module Kernel
     with_env(DBUS_SESSION_BUS_ADDRESS: ENV.fetch("HOMEBREW_DBUS_SESSION_BUS_ADDRESS", nil)) do
       safe_system(browser, *args)
     end
-  end
-
-  # GZips the given paths, and returns the gzipped paths.
-  def gzip(*paths)
-    odeprecated "Utils.gzip", "Utils::Gzip.compress"
-    Utils::Gzip.compress(*paths)
   end
 
   def ignore_interrupts(_opt = nil)
@@ -499,18 +494,6 @@ module Kernel
     ensure
       ENV.update(old_values)
     end
-  end
-
-  sig { returns(String) }
-  def preferred_shell
-    odeprecated "preferred_shell"
-    Utils::Shell.preferred_path(default: "/bin/sh")
-  end
-
-  sig { returns(String) }
-  def shell_profile
-    odeprecated "shell_profile"
-    Utils::Shell.profile
   end
 
   def tap_and_name_comparison

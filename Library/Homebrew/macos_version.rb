@@ -21,6 +21,7 @@ class MacOSVersion < Version
   # NOTE: When removing symbols here, ensure that they are added
   #       to `DEPRECATED_MACOS_VERSIONS` in `MacOSRequirement`.
   SYMBOLS = {
+    sonoma:      "14",
     ventura:     "13",
     monterey:    "12",
     big_sur:     "11",
@@ -41,7 +42,7 @@ class MacOSVersion < Version
   def initialize(version)
     raise MacOSVersion::Error, version unless /\A1\d+(?:\.\d+){0,2}\Z/.match?(version)
 
-    super(version)
+    super(T.must(version))
 
     @comparison_cache = {}
   end
@@ -139,28 +140,27 @@ end
 
 require "lazy_object"
 
+module MacOSVersionErrorCompat
+  def const_missing(name)
+    if name == :MacOSVersionError
+      odisabled "MacOSVersionError", "MacOSVersion::Error"
+      return MacOSVersion::Error
+    end
+
+    super
+  end
+end
+
 # `LazyObject` does not work for exceptions when used in `rescue` statements.
 class Object
   class << self
-    module MacOSVersionErrorCompat
-      def const_missing(name)
-        if name == :MacOSVersionError
-          # odeprecated "MacOSVersionError", "MacOSVersion::Error"
-          return MacOSVersion::Error
-        end
-
-        super
-      end
-    end
-    private_constant :MacOSVersionErrorCompat
-
     prepend MacOSVersionErrorCompat
   end
 end
 
 module MacOSVersions
   SYMBOLS = LazyObject.new do # rubocop:disable Style/MutableConstant
-    # odeprecated "MacOSVersions::SYMBOLS", "MacOSVersion::SYMBOLS"
+    odisabled "MacOSVersions::SYMBOLS", "MacOSVersion::SYMBOLS"
     MacOSVersion::SYMBOLS
   end
 end
@@ -169,7 +169,7 @@ module OS
   module Mac
     # TODO: Replace `::Version` with `Version` when this is removed.
     Version = LazyObject.new do # rubocop:disable Style/MutableConstant
-      # odeprecated "OS::Mac::Version", "MacOSVersion"
+      odisabled "OS::Mac::Version", "MacOSVersion"
       MacOSVersion
     end
   end
